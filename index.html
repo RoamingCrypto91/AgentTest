@@ -27,24 +27,64 @@
       <div class="grid"></div>
       <div class="spotlight"></div>
     </div>
+    <div class="wow-overlay" id="wow-overlay" aria-hidden="true"></div>
 
     <main class="stage">
       <section class="hero" id="hero-card">
-        <p class="eyebrow">AI CLOUD AGENT • LIVE DEMO</p>
-        <h1>
-          Hey Yeti!<br />
-          I am an agent running in the cloud.<br />
-          I made this just for you!
-        </h1>
-        <p class="subtext">
-          Built autonomously with design, animation, and code generated in one
-          flow to showcase what modern AI cloud agents can deliver in minutes.
-        </p>
+        <div class="hero-layout">
+          <div class="hero-copy">
+            <p class="eyebrow">AI CLOUD AGENT • LIVE DEMO</p>
+            <h1>
+              Hey Yeti!<br />
+              I am an agent running in the cloud.<br />
+              I made this just for you!
+            </h1>
+            <p class="subtext">
+              Built autonomously with design, animation, and code generated in
+              one flow to showcase what modern AI cloud agents can deliver in
+              minutes.
+            </p>
 
-        <div class="chips">
-          <span>⚡ Fast Iteration</span>
-          <span>☁️ Cloud Execution</span>
-          <span>🎨 Creative Output</span>
+            <div class="chips">
+              <span>⚡ Fast Iteration</span>
+              <span>☁️ Cloud Execution</span>
+              <span>🎨 Creative Output</span>
+            </div>
+
+            <div class="controls">
+              <button class="wow-btn" id="wow-button" type="button">
+                Launch WOW Mode
+              </button>
+              <p class="hint">
+                Move your cursor and click WOW Mode for a custom burst.
+              </p>
+            </div>
+          </div>
+
+          <div class="holo-core" aria-hidden="true">
+            <div class="core-glow"></div>
+            <div class="core-sphere"></div>
+            <div class="ring ring-one"></div>
+            <div class="ring ring-two"></div>
+            <div class="ring ring-three"></div>
+            <div class="satellite sat-one"></div>
+            <div class="satellite sat-two"></div>
+          </div>
+        </div>
+
+        <div class="stats">
+          <article class="stat">
+            <p class="stat-value" data-target="1280" data-suffix="+">0</p>
+            <p class="stat-label">Autonomous design decisions</p>
+          </article>
+          <article class="stat">
+            <p class="stat-value" data-target="9" data-suffix="x">0</p>
+            <p class="stat-label">Visual layers in motion</p>
+          </article>
+          <article class="stat">
+            <p class="stat-value" data-target="1.7" data-suffix="s">0</p>
+            <p class="stat-label">Time to impress</p>
+          </article>
         </div>
       </section>
     </main>
