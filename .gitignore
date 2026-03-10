@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+
+# Local runtime artifacts
+kb/
+.tmp/
