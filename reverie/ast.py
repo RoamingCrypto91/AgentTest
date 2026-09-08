@@ -183,6 +183,8 @@ class Print(Stmt):
     #: ``unprint`` -- consumes a line of output instead of producing one.
     #: This is what ``print`` becomes when a program is inverted.
     reverse: bool = False
+    #: ``print`` finishes the line; ``write`` leaves it open.
+    newline: bool = True
 
 
 @dataclass
@@ -398,4 +400,26 @@ def subexpressions(e: Optional[Expr]) -> list[Expr]:
             if node.index is not None:
                 out.append(node.index)
         i += 1
+    return out
+
+
+#: builtins whose argument is a *name*, not a value read out of storage
+METADATA_BUILTINS = ("len",)
+#: builtins whose argument names a stack that really is read
+STACK_BUILTINS = ("empty", "top", "size")
+
+
+def bare_name_ids(e: Optional[Expr], names=("len", "empty", "top", "size")) -> set[int]:
+    """Ids of ``Var`` nodes that name a thing rather than read it.
+
+    ``len(a)`` mentions ``a`` but does not look inside it, so it does not count
+    as reading the array -- which matters, because ``a[i] <=> a[len(a) - 1 - i]``
+    has to be legal for anything like a standard library to exist.
+    """
+    out: set[int] = set()
+    for node in subexpressions(e):
+        if isinstance(node, Builtin) and node.name in names:
+            for arg in node.args:
+                if isinstance(arg, Var):
+                    out.add(id(arg))
     return out

@@ -81,11 +81,26 @@ class EmbedPlan:
 
 
 @dataclass
+class ConstArg:
+    """A compile-time constant passed by reference through a hidden local."""
+
+    index: int
+    value: int
+    off: int = -1
+    name: str = ""
+
+
+@dataclass
 class ProcAnalysis:
     decl: ast.ProcDecl
     params: list[Symbol] = field(default_factory=list)
     frame_size: int = 0
     embeds: list[EmbedPlan] = field(default_factory=list)
+    #: parameter positions this procedure may write to, directly or through a
+    #: call it makes.  Computed to a fixpoint over the call graph.
+    writes: set[int] = field(default_factory=set)
+    #: globals this procedure may touch, directly or through a call it makes
+    touches: set[str] = field(default_factory=set)
 
 
 @dataclass
@@ -99,6 +114,8 @@ class Analysis:
     uses: dict[int, Symbol] = field(default_factory=dict)
     #: id(Embed node) -> plan
     plans: dict[int, EmbedPlan] = field(default_factory=dict)
+    #: id(Call node) -> constant arguments needing a hidden local
+    const_args: dict[int, list[ConstArg]] = field(default_factory=dict)
     diagnostics: Diagnostics = field(default_factory=Diagnostics)
     module: Optional[ast.Module] = None
 
@@ -130,8 +147,9 @@ class Scope:
 
 
 class Analyzer:
-    def __init__(self, module: ast.Module) -> None:
+    def __init__(self, module: ast.Module, require_main: bool = True) -> None:
         self.module = module
+        self.require_main = require_main
         self.a = Analysis(module=module)
         self.d = self.a.diagnostics
         self.embed_counter = 0
@@ -139,6 +157,13 @@ class Analyzer:
     # -- helpers ----------------------------------------------------------
     def error(self, message: str, span: Optional[Span], **kw) -> None:
         self.d.error(message, span, **kw)
+
+    def quiet(self):
+        """Context for "only report this if nothing else went wrong"."""
+        return len(self.d.errors)
+
+    def clean_since(self, mark: int) -> bool:
+        return len(self.d.errors) == mark
 
     def const_eval(self, e: Optional[ast.Expr], what: str) -> int:
         """Evaluate a compile-time constant expression."""
@@ -182,6 +207,16 @@ class Analyzer:
                 if isinstance(arg, ast.Var):
                     sym = self.current_lookup(arg.name)
                     if sym is not None and sym.is_array:
+                        if sym.length < 0:
+                            self.error(
+                                f"`len({arg.name})` is not known at compile time",
+                                e.span,
+                                notes=[
+                                    "the length of a `[]` parameter depends on the",
+                                    "caller, so it cannot size a declaration",
+                                ],
+                            )
+                            return 0
                         return sym.length
                 self.error("`len` needs an array name", e.span)
                 return 0
@@ -207,13 +242,16 @@ class Analyzer:
     def run(self) -> Analysis:
         self.collect_globals()
         self.collect_procs()
+        self.compute_parameter_writes()
+        self.compute_global_touches()
         for proc in self.module.procs():
             self.analyze_proc(proc)
         if "main" not in self.a.procs:
-            self.error(
-                "no `main` procedure", None,
-                notes=["execution starts at `proc main()`"],
-            )
+            if self.require_main:
+                self.error(
+                    "no `main` procedure", None,
+                    notes=["execution starts at `proc main()`"],
+                )
         else:
             main = self.a.procs["main"]
             if main.decl.params:
@@ -239,12 +277,15 @@ class Analyzer:
                     self.error(f"`{d.name}` is declared twice", d.span)
                 seen[d.name] = d.span
                 if isinstance(d.type, ast.TArray):
+                    mark = self.quiet()
                     n = self.const_eval(d.type.size, "an array length")
                     if n <= 0:
-                        self.error(
-                            f"array `{d.name}` must have a positive length, got {n}",
-                            d.span,
-                        )
+                        if self.clean_since(mark):
+                            self.error(
+                                f"array `{d.name}` must have a positive length, "
+                                f"got {n}",
+                                d.span,
+                            )
                         n = 1
                     d.type.length = n
                     sym = Symbol(d.name, "global", "array", n, addr=addr, span=d.span)
@@ -274,7 +315,11 @@ class Analyzer:
             params: list[Symbol] = []
             for i, prm in enumerate(p.params):
                 if isinstance(prm.type, ast.TArray):
-                    n = self.const_eval(prm.type.size, "an array parameter length")
+                    if prm.type.size is None:
+                        # `int a[]` -- length comes from whatever is passed in.
+                        n = -1
+                    else:
+                        n = self.const_eval(prm.type.size, "an array parameter length")
                     prm.type.length = n
                     params.append(Symbol(prm.name, "param", "array", n, index=i, span=prm.span))
                 elif isinstance(prm.type, ast.TStack):
@@ -288,6 +333,145 @@ class Analyzer:
                 seen.add(s.name)
             self.a.procs[p.name] = ProcAnalysis(p, params)
 
+    def compute_parameter_writes(self) -> None:
+        """Which parameters can a procedure write?
+
+        Reverie passes everything by reference, which normally means every
+        argument has to name a cell the caller owns.  But a parameter a
+        procedure only ever *reads* is safe to bind to a constant, because
+        nothing can come back through it -- so ``call fill(xs, 0)`` is
+        meaningful while ``call bump(counter, 0)`` is not.  The analysis is the
+        obvious fixpoint: start from direct writes, then propagate through
+        calls until nothing changes.
+        """
+        index_of: dict[str, dict[str, int]] = {}
+        for name, info in self.a.procs.items():
+            index_of[name] = {p.name: i for i, p in enumerate(info.params)}
+            for node in ast.walk(info.decl.body) if info.decl.body else ():
+                for written in self._direct_writes(node):
+                    i = index_of[name].get(written)
+                    if i is not None:
+                        info.writes.add(i)
+        changed = True
+        while changed:
+            changed = False
+            for name, info in self.a.procs.items():
+                if info.decl.body is None:
+                    continue
+                for node in ast.walk(info.decl.body):
+                    if not isinstance(node, ast.Call):
+                        continue
+                    callee = self.a.procs.get(node.name)
+                    if callee is None:
+                        continue
+                    for pos, arg in enumerate(node.args):
+                        if pos not in callee.writes:
+                            continue
+                        if not isinstance(arg, ast.Var):
+                            continue
+                        i = index_of[name].get(arg.name)
+                        if i is not None and i not in info.writes:
+                            info.writes.add(i)
+                            changed = True
+
+    def compute_global_touches(self) -> None:
+        """Which globals can a procedure reach?
+
+        Parameters are references.  If a caller passes global ``g`` to a
+        procedure that also mentions ``g`` by name, the parameter and the global
+        are two names for one cell -- and ``p += g`` inside that procedure is
+        secretly ``p += p``, which is not reversible.  Nothing local to the
+        procedure reveals this, so it has to be caught where the aliasing is
+        created: at the call.
+        """
+        names = set(self.a.globals)
+        for name, info in self.a.procs.items():
+            params = {p.name for p in info.params}
+            mentioned: set[str] = set()
+            if info.decl.body is not None:
+                for node in ast.walk(info.decl.body):
+                    if isinstance(node, ast.CStmt):
+                        continue  # classical blocks are handled as a unit below
+                    for e in ast.expressions(node):
+                        for sub in ast.subexpressions(e):
+                            if isinstance(sub, (ast.Var, ast.Index)):
+                                mentioned.add(sub.name)
+                    if isinstance(node, ast.Embed):
+                        for b in node.bindings:
+                            if b.target is not None:
+                                mentioned.add(b.target.name)
+                        # names the classical block declares itself are its
+                        # own, however they happen to be spelled
+                        declared, used = self._classical_names(node.body)
+                        for b in node.bindings:
+                            for sub in ast.subexpressions(b.expr):
+                                if isinstance(sub, (ast.Var, ast.Index)):
+                                    used.add(sub.name)
+                        mentioned |= used - declared
+            info.touches = (mentioned & names) - params
+        changed = True
+        while changed:
+            changed = False
+            for name, info in self.a.procs.items():
+                if info.decl.body is None:
+                    continue
+                for node in ast.walk(info.decl.body):
+                    if isinstance(node, ast.Call):
+                        callee = self.a.procs.get(node.name)
+                        if callee is None:
+                            continue
+                        extra = callee.touches - {p.name for p in info.params}
+                        if not extra <= info.touches:
+                            info.touches |= extra
+                            changed = True
+
+    @staticmethod
+    def _classical_names(block) -> tuple[set[str], set[str]]:
+        """(names the block declares, names it mentions)."""
+        declared: set[str] = set()
+        used: set[str] = set()
+        stack = [block]
+        while stack:
+            node = stack.pop()
+            if node is None:
+                continue
+            if isinstance(node, ast.CVar):
+                declared.add(node.name)
+            for attr in ("expr", "cond", "size"):
+                for sub in ast.subexpressions(getattr(node, attr, None)):
+                    if isinstance(sub, (ast.Var, ast.Index)):
+                        used.add(sub.name)
+            target = getattr(node, "target", None)
+            if isinstance(target, (ast.Var, ast.Index)):
+                used.add(target.name)
+            for attr in ("stmts", "then", "otherwise", "body", "init", "step"):
+                val = getattr(node, attr, None)
+                if isinstance(val, list):
+                    stack.extend(val)
+                elif val is not None:
+                    stack.append(val)
+        return declared, used
+
+    @staticmethod
+    def _direct_writes(node) -> set[str]:
+        out: set[str] = set()
+        if isinstance(node, (ast.Update, ast.UnaryStmt)) and node.target is not None:
+            out.add(node.target.name)
+        elif isinstance(node, ast.Swap):
+            for t in (node.left, node.right):
+                if t is not None:
+                    out.add(t.name)
+        elif isinstance(node, ast.StackOp):
+            if node.var is not None:
+                out.add(node.var.name)
+            if isinstance(node.stack, (ast.Var, ast.Index)):
+                out.add(node.stack.name)
+        elif isinstance(node, ast.Embed):
+            for b in node.bindings:
+                if b.target is not None:
+                    out.add(b.target.name)
+        return out
+
     # -- procedure bodies -------------------------------------------------
     def analyze_proc(self, p: ast.ProcDecl) -> None:
         info = self.a.procs.get(p.name)
@@ -296,12 +480,11 @@ class Analyzer:
         self.proc = info
         self.scope = Scope(None)
         for sym in info.params:
-            if self.a.globals.get(sym.name) is not None:
-                self.error(
-                    f"parameter `{sym.name}` shadows a global of the same name",
-                    sym.span,
-                    notes=["rename one of them; shadowing hides aliasing bugs"],
-                )
+            # A parameter shadowing a global is fine, and in fact safer: inside
+            # the body the global is simply unreachable, so it cannot alias the
+            # parameter.  The hazard the checker cares about is the other
+            # shape -- passing a global to a procedure that *also* names it
+            # directly -- and that is caught at the call site.
             self.scope.declare(sym)
         self.next_off = 0
         self.max_off = 0
@@ -360,9 +543,13 @@ class Analyzer:
                        notes=["declare stacks at module scope"])
             return None
         if isinstance(s.type, ast.TArray):
+            mark = self.quiet()
             n = self.const_eval(s.type.size, "a local array length")
             if n <= 0:
-                self.error(f"local array `{s.name}` needs a positive length", s.span)
+                if self.clean_since(mark):
+                    self.error(
+                        f"local array `{s.name}` needs a positive length", s.span
+                    )
                 n = 1
             s.type.length = n
             if s.expr is not None:
@@ -399,6 +586,19 @@ class Analyzer:
                     "exactly the way it was built",
                 ],
             )
+            # Recover by releasing whichever local was actually named, so a
+            # block that closes its locals out of order reports once rather
+            # than once per mismatch.
+            for other in reversed(opened):
+                if other.name == s.name:
+                    opened.remove(other)
+                    self.scope.names.pop(other.name, None)
+                    self.next_off -= other.length
+                    break
+            else:
+                opened.pop()
+                self.scope.names.pop(sym.name, None)
+                self.next_off -= sym.length
             return
         want_array = isinstance(s.type, ast.TArray)
         if want_array != sym.is_array:
@@ -491,8 +691,7 @@ class Analyzer:
         if base is None:
             return
         if base.kind == "const":
-            self.error(f"cannot update the constant `{base.name}`", s.span)
-            return
+            return  # already reported by analyze_lvalue
         if base.type == "stack":
             self.error(
                 f"cannot update the stack `{base.name}` directly", s.span,
@@ -511,13 +710,11 @@ class Analyzer:
         for target, sym in ((s.left, left), (s.right, right)):
             if sym is not None and sym.type == "stack":
                 self.error(f"cannot swap the stack `{sym.name}`", s.span)
+        names = {sym.name for sym in (left, right) if sym is not None}
         for target in (s.left, s.right):
             if isinstance(target, ast.Index):
-                for other in (left, right):
-                    if other is not None:
-                        self.forbid_reference(
-                            target.index, other.name, "a swap index"
-                        )
+                for name in sorted(names):
+                    self.forbid_reference(target.index, name, "a swap index")
 
     def analyze_if(self, s: ast.If) -> None:
         self.analyze_expr(s.entry)
@@ -528,7 +725,12 @@ class Analyzer:
             touched = set()
             for branch in (s.then, s.otherwise):
                 touched |= self.assigned_names(branch)
-            used = {v.name for v in ast.subexpressions(s.entry) if isinstance(v, (ast.Var, ast.Index))}
+            metadata = ast.bare_name_ids(s.entry, ast.METADATA_BUILTINS)
+            used = {
+                v.name
+                for v in ast.subexpressions(s.entry)
+                if isinstance(v, (ast.Var, ast.Index)) and id(v) not in metadata
+            }
             clash = sorted(touched & used)
             if clash:
                 self.error(
@@ -594,14 +796,22 @@ class Analyzer:
                 s.span,
             )
         seen: dict[str, ast.Expr] = {}
+        consts: list[ConstArg] = []
+        base_off = self.next_off
         for i, arg in enumerate(s.args):
-            if not isinstance(arg, ast.Var):
+            if not isinstance(arg, ast.Var) or (
+                arg.name in self.a.consts and self.scope.lookup(arg.name) is None
+            ):
+                if self._constant_argument(s, info, i, arg, consts):
+                    continue
                 self.error(
-                    "arguments must be plain variable names", getattr(arg, "span", s.span),
+                    "arguments must name a variable, or be a compile-time constant "
+                    "bound to a parameter the callee never writes",
+                    getattr(arg, "span", s.span),
                     notes=[
                         "parameters are passed by reference, so an argument has to",
-                        "name a cell; compute into a `local` first if you need an "
-                        "expression",
+                        "name a cell; compute into a `local` first if you need a",
+                        "value the callee will write back through",
                     ],
                 )
                 self.analyze_expr(arg)
@@ -622,6 +832,18 @@ class Analyzer:
                     ],
                 )
             seen[arg.name] = arg
+            if sym.kind == "global" and arg.name in info.touches:
+                self.error(
+                    f"`{s.name}` refers to the global `{arg.name}` by name, so it "
+                    f"cannot also receive it as an argument",
+                    arg.span,
+                    label="aliases a global the callee already uses",
+                    notes=[
+                        "the parameter and the global would be two names for one",
+                        "cell, and an update could then read the cell it writes",
+                        "rename the global, or copy it into a `local` first",
+                    ],
+                )
             if i < len(info.params):
                 want = info.params[i]
                 if want.type != sym.type:
@@ -630,12 +852,51 @@ class Analyzer:
                         f"but `{sym.name}` is `{sym.type}`",
                         arg.span,
                     )
-                elif want.type == "array" and want.length != sym.length:
+                elif (
+                    want.type == "array"
+                    and want.length >= 0
+                    and sym.length >= 0
+                    and want.length != sym.length
+                ):
                     self.error(
                         f"argument {i + 1} of `{s.name}` expects length "
                         f"{want.length}, `{sym.name}` has length {sym.length}",
                         arg.span,
                     )
+        self.next_off = base_off
+
+    def _constant_argument(
+        self,
+        call: ast.Call,
+        info: "ProcAnalysis",
+        pos: int,
+        arg: ast.Expr,
+        consts: list[ConstArg],
+    ) -> bool:
+        """Try to pass *arg* as a constant through a hidden local."""
+        if pos >= len(info.params):
+            return False
+        want = info.params[pos]
+        if want.type != "int":
+            return False
+        if pos in info.writes:
+            self.error(
+                f"`{info.decl.name}` writes to parameter `{want.name}`, so "
+                f"argument {pos + 1} must name a variable",
+                getattr(arg, "span", call.span),
+                notes=["a constant has nowhere to receive the result"],
+            )
+            return True
+        saved = list(self.d.errors)
+        value = self.const_eval(arg, "a constant argument")
+        if len(self.d.errors) != len(saved):
+            self.d.errors[:] = saved
+            return False
+        name = f"__arg{len(self.a.const_args)}_{pos}"
+        entry = ConstArg(pos, value, self.alloc(1), name)
+        consts.append(entry)
+        self.a.const_args.setdefault(id(call), []).append(entry)
+        return True
 
     def analyze_stack_op(self, s: ast.StackOp) -> None:
         sym = self.analyze_lvalue(s.var, "a push/pop target")
@@ -677,7 +938,10 @@ class Analyzer:
     def analyze_expr(self, e: Optional[ast.Expr]) -> None:
         if e is None:
             return
+        bare = ast.bare_name_ids(e)
         for node in ast.subexpressions(e):
+            if id(node) in bare:
+                continue  # handled by analyze_builtin
             if isinstance(node, ast.Var):
                 sym = self.resolve(node.name, node.span)
                 if sym is None:
@@ -755,7 +1019,10 @@ class Analyzer:
         """Rule 1: the updated variable may not be read while it is updated."""
         if e is None:
             return
+        metadata = ast.bare_name_ids(e, ast.METADATA_BUILTINS)
         for node in ast.subexpressions(e):
+            if id(node) in metadata:
+                continue
             if isinstance(node, (ast.Var, ast.Index)) and node.name == name:
                 self.error(
                     f"`{name}` may not appear in {where}",
@@ -850,7 +1117,10 @@ class Analyzer:
     def analyze_cexpr(self, e: Optional[ast.Expr]) -> None:
         if e is None:
             return
+        bare = ast.bare_name_ids(e)
         for node in ast.subexpressions(e):
+            if id(node) in bare:
+                continue
             if isinstance(node, ast.Var):
                 sym = self.cresolve(node.name, node.span)
                 if sym is None:
@@ -974,5 +1244,5 @@ def _edit(a: str, b: str) -> int:
     return prev[-1]
 
 
-def analyze(module: ast.Module) -> Analysis:
-    return Analyzer(module).run()
+def analyze(module: ast.Module, require_main: bool = True) -> Analysis:
+    return Analyzer(module, require_main).run()

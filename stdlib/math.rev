@@ -1,0 +1,102 @@
+// stdlib/math.rev -- arithmetic that would normally destroy its inputs.
+//
+// Each of these is written as ordinary destructive code inside an `embed`
+// block.  The compiler surrounds it with Bennett's compute/copy/uncompute
+// sandwich, so the scratch space is handed back and nothing is erased.
+
+/// root ^= floor(sqrt(n)) and rem ^= n - root*root.
+proc isqrt(int n, int root, int rem) {
+    embed (root ^= r, rem ^= n - r * r) {
+        var r = 0;
+        while ((r + 1) * (r + 1) <= n) {
+            r = r + 1;
+        }
+    }
+}
+
+/// out ^= gcd(|a|, |b|).
+proc gcd(int a, int b, int out) {
+    embed (out ^= x) {
+        var x = abs(a);
+        var y = abs(b);
+        var t = 0;
+        while (y != 0) {
+            t = x % y;
+            x = y;
+            y = t;
+        }
+    }
+}
+
+/// out ^= a**e mod m, by square-and-multiply.
+proc powmod(int a, int e, int m, int out) {
+    embed (out ^= r) {
+        var r = 1 % m;
+        var base = ((a % m) + m) % m;
+        var k = e;
+        while (k > 0) {
+            if (k % 2 == 1) {
+                r = (r * base) % m;
+            }
+            base = (base * base) % m;
+            k = k / 2;
+        }
+    }
+}
+
+/// out ^= n! (0! = 1).
+proc factorial(int n, int out) {
+    embed (out ^= f) {
+        var f = 1;
+        var i = 1;
+        while (i <= n) {
+            f = f * i;
+            i = i + 1;
+        }
+    }
+}
+
+/// out ^= floor(log2(n)) for n >= 1.
+proc log2(int n, int out) {
+    embed (out ^= k) {
+        var k = 0;
+        var v = n;
+        while (v > 1) {
+            v = v / 2;
+            k = k + 1;
+        }
+    }
+}
+
+/// out ^= the number of steps the Collatz sequence takes to reach 1.
+proc collatz_steps(int n, int out) {
+    embed (out ^= steps) {
+        var steps = 0;
+        var v = n;
+        while (v > 1) {
+            if (v % 2 == 0) {
+                v = v / 2;
+            } else {
+                v = 3 * v + 1;
+            }
+            steps = steps + 1;
+        }
+    }
+}
+
+/// out ^= 1 if n is prime, 0 otherwise.
+proc is_prime(int n, int out) {
+    embed (out ^= verdict) {
+        var verdict = 0;
+        if (n >= 2) {
+            verdict = 1;
+            var d = 2;
+            while (d * d <= n) {
+                if (n % d == 0) {
+                    verdict = 0;
+                }
+                d = d + 1;
+            }
+        }
+    }
+}

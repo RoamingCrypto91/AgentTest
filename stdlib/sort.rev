@@ -1,0 +1,39 @@
+// stdlib/sort.rev -- sorting, and the price of it.
+//
+// Sorting is not injective: (3, 5) and (5, 3) both sort to (3, 5), so the
+// original order cannot be recovered from the result.  A reversible sort has
+// to keep the difference somewhere, and the honest place is a stack of one bit
+// per comparison.  `uncall sort` reads those bits back and unsorts exactly.
+
+/// Bubble-sort xs ascending, recording one bit per comparison on `trail`.
+/// Requires len(xs) >= 2.  `uncall sort` restores the original order.
+proc sort(int xs[], stack trail) {
+    local int n = len(xs);
+    local int i = 0;
+    from i == 0 do {
+        local int j = 0;
+        from j == 0 do {
+            local int swapped = 0;
+            if xs[j] > xs[j + 1] {
+                xs[j] <=> xs[j + 1];
+                swapped += 1;
+            } else {
+                skip;
+            } fi swapped != 0;
+            push(swapped, trail);
+            delocal int swapped = 0;
+        } loop {
+            j += 1;
+        } until j == n - 2;
+        delocal int j = n - 2;
+    } loop {
+        i += 1;
+    } until i == n - 2;
+    delocal int i = n - 2;
+    delocal int n = len(xs);
+}
+
+/// How many comparisons `sort` will record for an array of length n.
+proc trail_size(int n, int out) {
+    out += (n - 1) * (n - 1);
+}

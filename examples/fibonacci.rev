@@ -1,0 +1,49 @@
+// Fibonacci, and the thing a reversible language can do that others cannot:
+// run the function backwards to invert it.
+//
+//   rev run examples/fibonacci.rev --set n=10
+//
+// `fib` maps n to the pair (F(n+1), F(n+2)) and consumes n to zero along the
+// way.  Nothing about it is special-cased for inversion -- but because every
+// statement in it has an exact inverse, `uncall fib` is a program that takes a
+// Fibonacci pair and tells you its index.  Nobody wrote that program.
+
+int n;
+int f1;
+int f2;
+
+int probe1;
+int probe2;
+int index;
+
+/// (a, b) := (F(k+1), F(k+2)), consuming k.
+proc fib(int a, int b, int k) {
+    if k == 0 {
+        a += 1;
+        b += 1;
+    } else {
+        k -= 1;
+        call fib(a, b, k);
+        a += b;
+        a <=> b;
+    } fi a == b;
+}
+
+/// Given a Fibonacci pair, recover its index -- by running `fib` backwards.
+proc identify(int a, int b, int k) {
+    uncall fib(a, b, k);
+}
+
+proc main() {
+    print "n = ", n;
+    call fib(f1, f2, n);
+    print "forwards:  fib -> (", f1, ", ", f2, "), and n is consumed to ", n;
+
+    // Hand `identify` a Fibonacci pair it has never seen computed.
+    probe1 += 89;
+    probe2 += 144;
+    print "backwards: given the pair (", probe1, ", ", probe2, ") ...";
+    call identify(probe1, probe2, index);
+    print "           the index is ", index, " and the pair is now (",
+          probe1, ", ", probe2, ")";
+}

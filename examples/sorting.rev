@@ -1,0 +1,40 @@
+// Sorting, and the price of it.
+//
+//   rev run examples/sorting.rev --set xs=5,3,9,1,7,2,8,4
+//
+// Sorting is not injective: (3,5) and (5,3) both sort to (3,5).  A reversible
+// sort therefore cannot just throw the original order away -- it has to keep
+// the difference somewhere.  `sort` keeps it as one bit per comparison on a
+// stack, and `uncall sort` reads those bits back to unsort exactly.
+//
+// The stack is not an implementation detail you could optimise away.  It is
+// the permutation, written down.
+
+import "sort.rev";
+
+const N = 8;
+
+int xs[N];
+stack trail;
+int comparisons;
+
+proc show(int a[]) {
+    print "  ", a[0], " ", a[1], " ", a[2], " ", a[3], " ",
+          a[4], " ", a[5], " ", a[6], " ", a[7];
+}
+
+proc main() {
+    print "before:";
+    call show(xs);
+
+    call sort(xs, trail);
+    comparisons += size(trail);
+    print "after ", comparisons, " comparisons:";
+    call show(xs);
+
+    // Now put it back.  The bits on `trail` are consumed exactly.
+    comparisons -= size(trail);
+    uncall sort(xs, trail);
+    print "unsorted again, trail empty (", size(trail), " bits left):";
+    call show(xs);
+}

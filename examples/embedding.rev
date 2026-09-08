@@ -1,0 +1,38 @@
+// Ordinary destructive code, made reversible and garbage-free.
+//
+//   rev run    examples/embedding.rev --set n=1234567
+//   rev doctor examples/embedding.rev --set n=1234567
+//
+// Inside `embed` you may write the code you would write anywhere else: plain
+// `=` assignment, `while`, `if`, temporaries you overwrite.  The compiler
+// wraps it in Bennett's construction --
+//
+//     compute        (recording everything it overwrites on a history tape)
+//     copy out       (one reversible `^=` per result)
+//     uncompute      (the same procedure, uncalled, draining the tape)
+//
+// -- so the answer survives and the scratch does not.  `rev doctor` will tell
+// you how many bits went onto the tape and that all of them came back.
+
+import "math.rev";
+
+int n;
+int root;
+int rem;
+int steps;
+int digits;
+int divisor;
+
+proc main() {
+    call isqrt(n, root, rem);
+    print "isqrt(", n, ") = ", root, " remainder ", rem;
+
+    call collatz_steps(n, steps);
+    print "collatz(", n, ") reaches 1 in ", steps, " steps";
+
+    call log2(n, digits);
+    print "floor(log2(", n, ")) = ", digits;
+
+    call gcd(n, 1234500, divisor);
+    print "gcd(", n, ", 1234500) = ", divisor;
+}

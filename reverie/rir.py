@@ -243,35 +243,43 @@ class RPop(RPush):
 
 
 class REmit(RStmt):
-    __slots__ = ("parts",)
+    __slots__ = ("parts", "newline")
 
-    def __init__(self, parts: Sequence[object], span: Optional[Span] = None) -> None:
+    def __init__(
+        self,
+        parts: Sequence[object],
+        span: Optional[Span] = None,
+        newline: bool = True,
+    ) -> None:
         super().__init__(span)
         self.parts = list(parts)
+        self.newline = newline
 
     def invert(self) -> RStmt:
-        return RUnemit(self.parts, self.span)
+        return RUnemit(self.parts, self.span, self.newline)
 
     def lower(self, b: "CodeBuilder") -> None:
-        b.emit(isa.Emit(self.parts, self.span))
+        b.emit(isa.Emit(self.parts, self.span, self.newline))
 
     def render(self, indent: int = 0) -> str:
         bits = [repr(p) if isinstance(p, str) else p.render() for p in self.parts]
-        return f"{'  ' * indent}print {', '.join(bits)}"
+        kw = "print" if self.newline else "write"
+        return f"{'  ' * indent}{kw} {', '.join(bits)}"
 
 
 class RUnemit(REmit):
     __slots__ = ()
 
     def invert(self) -> RStmt:
-        return REmit(self.parts, self.span)
+        return REmit(self.parts, self.span, self.newline)
 
     def lower(self, b: "CodeBuilder") -> None:
-        b.emit(isa.Unemit(self.parts, self.span))
+        b.emit(isa.Unemit(self.parts, self.span, self.newline))
 
     def render(self, indent: int = 0) -> str:
         bits = [repr(p) if isinstance(p, str) else p.render() for p in self.parts]
-        return f"{'  ' * indent}unprint {', '.join(bits)}"
+        kw = "unprint" if self.newline else "unwrite"
+        return f"{'  ' * indent}{kw} {', '.join(bits)}"
 
 
 class RIf(RStmt):

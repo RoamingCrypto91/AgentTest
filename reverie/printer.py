@@ -133,7 +133,8 @@ def print_stmt(s: ast.Stmt, depth: int = 0) -> str:
         parts = [
             _quote(p) if isinstance(p, str) else print_expr(p) for p in s.parts
         ]
-        kw = "unprint" if s.reverse else "print"
+        base = "print" if s.newline else "write"
+        kw = ("un" + base) if s.reverse else base
         return f"{pad}{kw} {', '.join(parts)};"
     if isinstance(s, ast.Assert):
         return f"{pad}assert {print_expr(s.expr)};"

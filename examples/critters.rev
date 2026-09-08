@@ -1,0 +1,82 @@
+// A reversible cellular automaton -- time runs both ways.
+//
+//   rev run examples/critters.rev --set seed=0b0000000010000000000000000000000
+//
+// Ordinary cellular automata forget: many configurations can lead to the same
+// successor, so you cannot run them backwards.  The second-order construction
+// fixes that by making each step depend on *two* generations at once:
+//
+//     next = rule(current) xor previous
+//
+// which is its own inverse in the sense that `previous = rule(current) xor
+// next`.  In Reverie you write that as one `^=` and get the backwards
+// evolution from `uncall`.
+
+const N = 39;
+const STEPS = 18;
+
+int seed;
+int prev[N];
+int cur[N];
+
+/// One step: prev becomes generation t+1, then the two rows swap roles.
+proc step(int older[], int newer[]) {
+    local int i = 0;
+    from i == 0 do {
+        older[i] ^= newer[(i + len(newer) - 1) % len(newer)]
+                  ^ newer[(i + 1) % len(newer)];
+    } loop {
+        i += 1;
+    } until i == len(older) - 1;
+    delocal int i = len(older) - 1;
+
+    local int j = 0;
+    from j == 0 do {
+        older[j] <=> newer[j];
+    } loop {
+        j += 1;
+    } until j == len(older) - 1;
+    delocal int j = len(older) - 1;
+}
+
+proc render(int row[]) {
+    local int i = 0;
+    local int acc = 0;
+    from i == 0 do {
+        if row[i] != 0 {
+            write "#";
+        } else {
+            write ".";
+        } fi;
+    } loop {
+        i += 1;
+    } until i == len(row) - 1;
+    print "";
+    delocal int acc = 0;
+    delocal int i = len(row) - 1;
+}
+
+proc main() {
+    // one live cell in the middle
+    cur[N / 2] += 1;
+
+    local int t = 0;
+    from t == 0 do {
+        call render(cur);
+    } loop {
+        t += 1;
+        call step(prev, cur);
+    } until t == STEPS;
+    delocal int t = STEPS;
+
+    print "-- now run the automaton backwards --";
+
+    local int u = 0;
+    from u == 0 do {
+        call render(cur);
+    } loop {
+        u += 1;
+        uncall step(prev, cur);
+    } until u == STEPS;
+    delocal int u = STEPS;
+}

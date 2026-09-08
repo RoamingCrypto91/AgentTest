@@ -70,6 +70,16 @@ class Addr:
     def resolve(self, m) -> int:  # pragma: no cover - abstract
         raise NotImplementedError
 
+    def extent(self, m) -> int:
+        """How many cells this address spans -- an array's length.
+
+        Static for globals and locals.  A by-reference array *parameter* does
+        not know its length until it is bound, so it asks the frame, which is
+        why Reverie can have a standard library that works on arrays of any
+        size without any of it being generic in the type system.
+        """
+        return 1
+
     def render(self) -> str:  # pragma: no cover - abstract
         raise NotImplementedError
 
@@ -92,14 +102,18 @@ class Addr:
 class AbsA(Addr):
     """A fixed global cell."""
 
-    __slots__ = ("index", "name")
+    __slots__ = ("index", "name", "size")
 
-    def __init__(self, index: int, name: str = "") -> None:
+    def __init__(self, index: int, name: str = "", size: int = 1) -> None:
         self.index = index
         self.name = name
+        self.size = size
 
     def resolve(self, m) -> int:
         return self.index
+
+    def extent(self, m) -> int:
+        return self.size
 
     def render(self) -> str:
         return f"@{self.name or self.index}" if self.name else f"@{self.index}"
@@ -111,14 +125,18 @@ class AbsA(Addr):
 class LocalA(Addr):
     """A cell in the current frame: ``mem[fp + off]``."""
 
-    __slots__ = ("off", "name")
+    __slots__ = ("off", "name", "size")
 
-    def __init__(self, off: int, name: str = "") -> None:
+    def __init__(self, off: int, name: str = "", size: int = 1) -> None:
         self.off = off
         self.name = name
+        self.size = size
 
     def resolve(self, m) -> int:
         return m.fp + self.off
+
+    def extent(self, m) -> int:
+        return self.size
 
     def render(self) -> str:
         return f"%{self.name}+{self.off}" if self.name else f"%{self.off}"
@@ -145,6 +163,12 @@ class ParamA(Addr):
         except IndexError:  # pragma: no cover - defensive
             raise RuntimeFault(f"parameter #{self.index} not bound")
 
+    def extent(self, m) -> int:
+        frame = m.frame
+        if frame is None:  # pragma: no cover - defensive
+            raise RuntimeFault("parameter access outside of a procedure frame")
+        return frame.param_lens[self.index]
+
     def render(self) -> str:
         return f"&{self.name}" if self.name else f"&{self.index}"
 
@@ -165,11 +189,15 @@ class IndexA(Addr):
 
     def resolve(self, m) -> int:
         i = self.index.eval(m)
-        if i < 0 or i >= self.length:
+        n = self.length if self.length >= 0 else self.base.extent(m)
+        if i < 0 or i >= n:
             raise RuntimeFault(
-                f"index {i} out of bounds for `{self.name or 'array'}` of length {self.length}"
+                f"index {i} out of bounds for `{self.name or 'array'}` of length {n}"
             )
         return self.base.resolve(m) + i
+
+    def extent(self, m) -> int:
+        return 1
 
     def render(self) -> str:
         return f"{self.base.render()}[{self.index.render()}]"
@@ -294,6 +322,27 @@ class AddrOf(Expr):
 
     def render(self) -> str:
         return f"addr({self.addr.render()})"
+
+    def children(self):
+        return (self.addr,)
+
+    def _key(self):
+        return (self.addr,)
+
+
+class ArrayLen(Expr):
+    """``len(a)`` where ``a`` is a by-reference array parameter."""
+
+    __slots__ = ("addr",)
+
+    def __init__(self, addr: Addr) -> None:
+        self.addr = addr
+
+    def eval(self, m) -> int:
+        return self.addr.extent(m)
+
+    def render(self) -> str:
+        return f"len({self.addr.render()})"
 
     def children(self):
         return (self.addr,)

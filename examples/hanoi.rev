@@ -1,0 +1,71 @@
+// Towers of Hanoi, played on three stacks -- then played backwards.
+//
+//   rev run examples/hanoi.rev
+//
+// The recursion is reversible because the conditional carries an exit
+// predicate: after the recursive branch `n` has been restored, so `n > 0` is
+// true; after the base case `n` is zero, so it is false.  That one predicate
+// is the entire difference between a recursion you can only run and one you
+// can also unrun.
+
+const DISCS = 4;
+
+stack a;
+stack b;
+stack c;
+stack moves;
+
+int placed;
+
+proc hanoi(int n, stack src, stack via, stack dst, stack log) {
+    if n > 0 {
+        n -= 1;
+        call hanoi(n, src, dst, via, log);
+
+        local int disc = 0;
+        pop(disc, src);
+        local int note = disc;
+        push(disc, dst);
+        push(note, log);
+        delocal int note = 0;
+        delocal int disc = 0;
+
+        call hanoi(n, via, src, dst, log);
+        n += 1;
+    } else {
+        skip;
+    } fi n > 0;
+}
+
+proc stack_up(stack peg, int n) {
+    local int i = 0;
+    from i == 0 do {
+        local int disc = n - i;
+        push(disc, peg);
+        delocal int disc = 0;
+    } loop {
+        i += 1;
+    } until i == n - 1;
+    delocal int i = n - 1;
+}
+
+proc main() {
+    call stack_up(a, DISCS);
+    print "start:  a=", size(a), " b=", size(b), " c=", size(c);
+
+    local int n = DISCS;
+    call hanoi(n, a, b, c, moves);
+    delocal int n = DISCS;
+
+    placed += size(c);
+    print "solved: a=", size(a), " b=", size(b), " c=", size(c),
+          " in ", size(moves), " moves";
+
+    // Undo the whole game.  Every disc goes back, every move is unlogged.
+    placed -= size(c);
+    local int m = DISCS;
+    uncall hanoi(m, a, b, c, moves);
+    delocal int m = DISCS;
+    print "undone: a=", size(a), " b=", size(b), " c=", size(c),
+          ", move log ", size(moves);
+}

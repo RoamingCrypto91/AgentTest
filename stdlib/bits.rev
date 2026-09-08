@@ -1,0 +1,96 @@
+// stdlib/bits.rev -- reversible bit manipulation.
+//
+// These are the clearest demonstration of what `local` and `delocal` are for.
+// A reversible update may not read the cell it writes, so `x ^= x >> 1` is
+// rejected -- but a bit that the update did not touch can still be read
+// afterwards, which is exactly what the `delocal` expressions below do.
+
+/// Gray-code x in place over `width` bits: bit i becomes x_i xor x_{i+1}.
+/// `uncall gray_encode` decodes.  Requires width >= 2 and 0 <= x < 2**width.
+proc gray_encode(int x, int width) {
+    local int i = 0;
+    from i == 0 do {
+        // Bit i+1 has not been touched yet, so it still holds its original
+        // value -- and it will still hold it after we flip bit i, which is
+        // what lets the scratch cell be released.
+        local int b = (x >> (i + 1)) & 1;
+        x ^= b << i;
+        delocal int b = (x >> (i + 1)) & 1;
+    } loop {
+        i += 1;
+    } until i == width - 2;
+    delocal int i = width - 2;
+}
+
+/// Reverse the low `width` bits of x in place.  Self-inverse.
+proc bitrev(int x, int width) {
+    local int i = 0;
+    from i == 0 do {
+        local int j = width - 1 - i;
+        local int bi = (x >> i) & 1;
+        local int bj = (x >> j) & 1;
+        if bi != bj {
+            x ^= (1 << i) | (1 << j);
+        } else {
+            skip;
+        } fi;
+        // after the flip, bit i holds what bit j held, and vice versa
+        delocal int bj = (x >> i) & 1;
+        delocal int bi = (x >> j) & 1;
+        delocal int j = width - 1 - i;
+    } loop {
+        i += 1;
+    } until i == width / 2 - 1;
+    delocal int i = width / 2 - 1;
+}
+
+/// out ^= the number of set bits in x (x >= 0).
+proc popcount(int x, int out) {
+    embed (out ^= n) {
+        var n = 0;
+        var v = x;
+        while (v != 0) {
+            n = n + (v & 1);
+            v = v / 2;
+        }
+    }
+}
+
+/// Rotate the low `width` bits of x left by one place.  Self-inverse only
+/// when width is 1 or 2; otherwise `uncall` rotates right.
+proc rotate_left(int x, int width) {
+    local int i = 0;
+    from i == 0 do {
+        local int j = width - 1 - i;
+        local int bi = (x >> i) & 1;
+        local int bj = (x >> j) & 1;
+        if bi != bj {
+            x ^= (1 << i) | (1 << j);
+        } else {
+            skip;
+        } fi;
+        delocal int bj = (x >> i) & 1;
+        delocal int bi = (x >> j) & 1;
+        delocal int j = width - 1 - i;
+    } loop {
+        i += 1;
+    } until i == width / 2 - 1;
+    delocal int i = width / 2 - 1;
+    local int k = 0;
+    from k == 0 do {
+        local int j = width - 2 - k;
+        local int bi = (x >> k) & 1;
+        local int bj = (x >> j) & 1;
+        if bi != bj {
+            x ^= (1 << k) | (1 << j);
+        } else {
+            skip;
+        } fi;
+        delocal int bj = (x >> k) & 1;
+        delocal int bi = (x >> j) & 1;
+        delocal int j = width - 2 - k;
+    } loop {
+        k += 1;
+    } until k == (width - 1) / 2 - 1;
+    delocal int k = (width - 1) / 2 - 1;
+}

@@ -1,0 +1,34 @@
+// Gray codes and bit reversal, in place.
+//
+//   rev run examples/bits.rev --set value=0b10110011
+//
+// A reversible update may not read the cell it writes, so `x ^= x >> 1` is
+// rejected outright.  The way round it is the whole point of `local` and
+// `delocal`: read a bit you are *not* about to change, use it, and then read
+// it again to release the scratch cell.  Nothing is copied and nothing is
+// dropped, which is why `uncall gray_encode` decodes.
+
+import "bits.rev";
+
+const WIDTH = 8;
+
+int value;
+int coded;
+int mirrored;
+int ones;
+
+proc main() {
+    coded += value;
+    call gray_encode(coded, WIDTH);
+    print "value ", value, " -> gray ", coded;
+    uncall gray_encode(coded, WIDTH);
+    print "gray decoded back to ", coded;
+    call gray_encode(coded, WIDTH);
+
+    mirrored += value;
+    call bitrev(mirrored, WIDTH);
+    print "bit-reversed ", value, " -> ", mirrored;
+
+    call popcount(value, ones);
+    print "popcount(", value, ") = ", ones;
+}

@@ -1,0 +1,53 @@
+// Run-length encoding -- and its decoder, which nobody wrote.
+//
+//   rev run  examples/rle.rev            encode
+//   rev back examples/rle.rev            encode, then decode, and prove the
+//                                        round trip is exact
+//
+// `encode` moves information: it drains `data` to zero as it fills `out`.
+// That is what makes it invertible, and `uncall encode` is the decoder.
+
+const N = 16;
+
+int data[N];
+int out[32];
+int outlen;
+
+/// Encode `src` into (value, count) pairs in `dst`, consuming `src`.
+proc encode(int src[], int dst[], int used) {
+    local int i = 0;
+    local int k = 0;
+    from i == 0 do {
+        // how long is the run starting at i?
+        local int run = 0;
+        from run == 0 do {
+            run += 1;
+        } loop {
+        } until i + run == len(src) || src[i + run] != src[i];
+
+        dst[k] += src[i];
+        dst[k + 1] += run;
+
+        // erase the run we just recorded -- the information now lives in dst
+        local int t = 0;
+        from t == 0 do {
+            src[i + t] -= dst[k];
+        } loop {
+            t += 1;
+        } until t == run - 1;
+        delocal int t = run - 1;
+
+        k += 2;
+        i += run;
+        delocal int run = dst[k - 1];
+    } loop {
+    } until i == len(src);
+    used += k;
+    delocal int k = used;
+    delocal int i = len(src);
+}
+
+proc main() {
+    call encode(data, out, outlen);
+    print "encoded into ", outlen, " cells (", outlen / 2, " runs)";
+}

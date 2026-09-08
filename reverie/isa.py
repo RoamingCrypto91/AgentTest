@@ -467,14 +467,25 @@ class StackPop(StackPush):
 
 
 class Emit(Instr):
-    """``print`` -- appends a line to the output log; rewinding removes it."""
+    """``print`` / ``write`` -- output, which rewinding takes back.
 
-    __slots__ = ("parts",)
+    The machine keeps a partial-line buffer alongside the finished lines, so
+    that building a line piece by piece is reversible too: ``write`` appends to
+    the buffer, ``print`` flushes it, and each undoes exactly what it did.
+    """
+
+    __slots__ = ("parts", "newline")
     name = "emit"
 
-    def __init__(self, parts: Sequence[object], span: Optional[Span] = None) -> None:
+    def __init__(
+        self,
+        parts: Sequence[object],
+        span: Optional[Span] = None,
+        newline: bool = True,
+    ) -> None:
         super().__init__(span)
         self.parts = list(parts)
+        self.newline = newline
 
     def _text(self, m) -> str:
         out = []
@@ -485,21 +496,45 @@ class Emit(Instr):
                 out.append(str(p.eval(m)))
         return "".join(out)
 
-    def forward(self, m) -> None:
-        m.output.append(self._text(m))
-        m.pc += 1
+    def _produce(self, m) -> None:
+        text = self._text(m)
+        if self.newline:
+            m.output.append(m.line + text)
+            m.line = ""
+        else:
+            m.line += text
 
     def _consume(self, m) -> None:
-        if not m.output:
-            raise RuntimeFault("cannot un-print: the output log is empty", pc=self.at)
         expect = self._text(m)
-        got = m.output.pop()
-        if got != expect:
-            raise RuntimeFault(
-                f"un-print mismatch: the log holds {got!r} but the instruction "
-                f"reproduces {expect!r}",
-                pc=self.at,
-            )
+        if self.newline:
+            if not m.output:
+                raise RuntimeFault(
+                    "cannot un-print: the output log is empty", pc=self.at
+                )
+            if m.line:
+                raise RuntimeFault(
+                    "cannot un-print: a partial line is still open", pc=self.at
+                )
+            got = m.output.pop()
+            if not got.endswith(expect):
+                raise RuntimeFault(
+                    f"un-print mismatch: the log holds {got!r} but the "
+                    f"instruction reproduces {expect!r}",
+                    pc=self.at,
+                )
+            m.line = got[: len(got) - len(expect)] if expect else got
+        else:
+            if not m.line.endswith(expect):
+                raise RuntimeFault(
+                    f"un-write mismatch: the open line is {m.line!r} but the "
+                    f"instruction reproduces {expect!r}",
+                    pc=self.at,
+                )
+            m.line = m.line[: len(m.line) - len(expect)] if expect else m.line
+
+    def forward(self, m) -> None:
+        self._produce(m)
+        m.pc += 1
 
     def backward(self, m) -> None:
         self._consume(m)
@@ -509,7 +544,7 @@ class Emit(Instr):
         bits = []
         for p in self.parts:
             bits.append(repr(p) if isinstance(p, str) else p.render())
-        return ", ".join(bits)
+        return ("" if self.newline else "-nl ") + ", ".join(bits)
 
     def refs(self):
         return tuple(p for p in self.parts if not isinstance(p, str))
@@ -531,7 +566,7 @@ class Unemit(Emit):
         m.pc += 1
 
     def backward(self, m) -> None:
-        m.output.append(self._text(m))
+        Emit._produce(self, m)
         m.pc -= 1
 
 
@@ -812,7 +847,8 @@ class Call(Instr):
                 pc=self.at,
             )
         params = [a.resolve(m) for a in self.args]
-        m.enter_frame(info, params, self.at, self.uncall)
+        lens = [a.extent(m) for a in self.args]
+        m.enter_frame(info, params, lens, self.at, self.uncall)
         if reverse:
             # enter at the far end, walking the body backwards.  `exit_at` is
             # the boundary just above the last body instruction.

@@ -48,12 +48,17 @@ def resolve_import(path: str, importer: str) -> str:
     here = os.path.dirname(os.path.abspath(__file__))
     roots.append(os.path.join(os.path.dirname(here), "stdlib"))
     roots.extend(p for p in os.environ.get(PRELUDE_ENV, "").split(os.pathsep) if p)
+    here_real = os.path.abspath(importer)
     for root in roots:
-        candidate = os.path.join(root, path)
-        if os.path.exists(candidate):
+        for candidate in (
+            os.path.join(root, path),
+            os.path.join(root, path + ".rev") if not path.endswith(".rev") else None,
+        ):
+            if candidate is None or not os.path.exists(candidate):
+                continue
+            if os.path.abspath(candidate) == here_real:
+                continue  # a module never imports itself; keep looking
             return candidate
-        if not path.endswith(".rev") and os.path.exists(candidate + ".rev"):
-            return candidate + ".rev"
     raise ReverieError(
         f"cannot find module {path!r}",
         notes=["searched: " + ", ".join(roots)],
@@ -137,6 +142,8 @@ def cmd_run(args) -> int:
     m.run()
     for line in m.output:
         print(line)
+    if m.line:
+        print(m.line)
     if not args.quiet:
         if m.output:
             print()
@@ -178,10 +185,28 @@ def cmd_back(args) -> int:
 
 def cmd_check(args) -> int:
     module = load_module(args.file)
-    a = analyze(module)
+    is_library = module.find_proc(args.entry) is None
+    a = analyze(module, require_main=not is_library)
     if not a.ok:
         print(_report(a), file=sys.stderr)
         return 1
+    if is_library:
+        names = [p.name for p in module.procs()]
+        print(f"{args.file}: ok (library, no `{args.entry}`)")
+        for name in names:
+            info = a.procs[name]
+            params = ", ".join(
+                ("stack " + p.name) if p.type == "stack"
+                else (f"int {p.name}[{'' if p.length < 0 else p.length}]")
+                if p.type == "array" else f"int {p.name}"
+                for p in info.params
+            )
+            ro = sorted(set(range(len(info.params))) - info.writes)
+            note = ""
+            if ro and info.params:
+                note = "  read-only: " + ", ".join(info.params[i].name for i in ro)
+            print(f"    {name}({params}){note}")
+        return 0
     prog = Compiler(module, a).compile(args.entry)
     print(f"{args.file}: ok")
     print(f"  {len(prog.procs)} procedures, {len(prog.code)} instructions, "

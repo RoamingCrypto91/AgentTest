@@ -76,7 +76,7 @@ def invert_stmt(s: ast.Stmt) -> ast.Stmt:
     if isinstance(s, ast.StackOp):
         return ast.StackOp(s.span, s.var, s.stack, not s.pop)
     if isinstance(s, ast.Print):
-        return ast.Print(s.span, s.parts, not s.reverse)
+        return ast.Print(s.span, s.parts, not s.reverse, s.newline)
     if isinstance(s, ast.Undo):
         return s.body if s.body is not None else ast.Skip(s.span)
     if isinstance(s, ast.Embed):

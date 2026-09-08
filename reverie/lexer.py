@@ -27,6 +27,8 @@ KEYWORDS = {
     "pop",
     "print",
     "unprint",
+    "write",
+    "unwrite",
     "assert",
     "skip",
     "undo",

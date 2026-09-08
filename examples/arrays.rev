@@ -1,0 +1,46 @@
+// The array library, and what `uncall` gives you for free.
+//
+//   rev run examples/arrays.rev --set xs=3,1,4,1,5,9,2,6
+
+import "array.rev";
+
+const N = 8;
+
+int xs[N];
+int total;
+int biggest;
+int checksum;
+
+proc show(int label, int a[]) {
+    write "  ";
+    local int i = 0;
+    from i == 0 do {
+        write a[i], " ";
+    } loop {
+        i += 1;
+    } until i == len(a) - 1;
+    delocal int i = len(a) - 1;
+    print "";
+}
+
+proc main() {
+    print "given:";
+    call show(0, xs);
+
+    call sum_into(xs, total);
+    call max_into(xs, biggest);
+    call xor_into(xs, checksum);
+    print "sum ", total, ", max ", biggest, ", xor ", checksum;
+
+    call rotate(xs, 3);
+    print "rotated left by 3:";
+    call show(0, xs);
+
+    uncall rotate(xs, 3);
+    print "and rotated back:";
+    call show(0, xs);
+
+    call reverse(xs);
+    print "reversed:";
+    call show(0, xs);
+}

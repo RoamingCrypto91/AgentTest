@@ -1,0 +1,70 @@
+// A Feistel network.  Write the encryption; the decryption is `uncall`.
+//
+//   rev run examples/cipher.rev
+//
+// Feistel constructions are the textbook way to build an invertible cipher
+// out of a mixing function that is not itself invertible.  In Reverie you do
+// not have to build anything: `l ^= mix(r)` is already reversible, and running
+// the rounds backwards is decryption.
+
+const ROUNDS = 12;
+const KEY = 0x5EED;
+const MASK = 0xFFFF;
+const N = 6;
+
+int plaintext[N];
+int ciphertext[N];
+
+/// One 32-bit block as two 16-bit halves.
+proc feistel(int l, int r) {
+    local int i = 0;
+    from i == 0 do {
+        l ^= ((((r ^ KEY) * 2654435761 + i * 40503) >> 5) & MASK);
+        l <=> r;
+    } loop {
+        i += 1;
+    } until i == ROUNDS - 1;
+    delocal int i = ROUNDS - 1;
+}
+
+/// Encrypt every pair of cells in place.
+proc encrypt(int block[]) {
+    local int i = 0;
+    from i == 0 do {
+        call feistel_at(block, i);
+    } loop {
+        i += 2;
+    } until i == len(block) - 2;
+    delocal int i = len(block) - 2;
+}
+
+proc feistel_at(int block[], int i) {
+    local int l = 0;
+    local int r = 0;
+    // `<=>` moves rather than copies, which is how you get a value out of a
+    // cell without leaving a second copy behind that would have to be erased.
+    l <=> block[i];
+    r <=> block[i + 1];
+    call feistel(l, r);
+    l <=> block[i];
+    r <=> block[i + 1];
+    delocal int r = 0;
+    delocal int l = 0;
+}
+
+proc main() {
+    local int i = 0;
+    from i == 0 do {
+        ciphertext[i] ^= plaintext[i];
+    } loop {
+        i += 1;
+    } until i == len(ciphertext) - 1;
+    delocal int i = len(ciphertext) - 1;
+
+    call encrypt(ciphertext);
+    print "cipher: ", ciphertext[0], " ", ciphertext[1], " ", ciphertext[2], " ",
+          ciphertext[3], " ", ciphertext[4], " ", ciphertext[5];
+    uncall encrypt(ciphertext);
+    print "plain:  ", ciphertext[0], " ", ciphertext[1], " ", ciphertext[2], " ",
+          ciphertext[3], " ", ciphertext[4], " ", ciphertext[5];
+}

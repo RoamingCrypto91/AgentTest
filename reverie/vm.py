@@ -101,6 +101,7 @@ class Frame:
     proc: ProcInfo
     base: int
     params: list[int]
+    param_lens: list[int]
     call_at: int
     uncall: bool
     saved_fp: int
@@ -174,6 +175,8 @@ class Machine:
         self.stats = Stats()
         self.history = HistoryTape(self.stats)
         self.output: list[str] = []
+        #: partial line built by `write` and flushed by `print`
+        self.line = ""
         self.fp = 0
         self.sp = program.n_globals
         self.pc = 0
@@ -209,7 +212,12 @@ class Machine:
 
     # -- frames -----------------------------------------------------------
     def enter_frame(
-        self, info: ProcInfo, params: list[int], call_at: int, uncall: bool
+        self,
+        info: ProcInfo,
+        params: list[int],
+        param_lens: list[int],
+        call_at: int,
+        uncall: bool,
     ) -> None:
         base = self.sp
         need = base + info.frame_size
@@ -220,7 +228,7 @@ class Machine:
                 pc=self.pc,
             )
         self.frames.append(
-            Frame(info, base, params, call_at, uncall, self.fp, self.sp)
+            Frame(info, base, params, param_lens, call_at, uncall, self.fp, self.sp)
         )
         self.fp = base
         self.sp = need
@@ -355,6 +363,8 @@ class Machine:
         problems = []
         if self.history:
             problems.append(f"history tape holds {len(self.history)} unreclaimed entries")
+        if self.line:
+            problems.append(f"a line of output was never finished: {self.line!r}")
         if self.frames:
             problems.append(f"{len(self.frames)} frames still open")
         if self.sp != self.program.n_globals:
@@ -385,6 +395,7 @@ class Machine:
             "stacks": [list(s) for s in self.stacks],
             "history": list(self.history),
             "output": list(self.output),
+            "line": self.line,
             "frames": copy.deepcopy(self.frames),
         }
 
@@ -401,6 +412,7 @@ class Machine:
         self.history.clear()
         self.history.extend(snap["history"])
         self.output = list(snap["output"])
+        self.line = snap.get("line", "")
         self.frames = copy.deepcopy(snap["frames"])
         return self
 
@@ -451,6 +463,8 @@ def state_equal(a: dict, b: dict) -> tuple[bool, str]:
         return False, f"history: {a['history']} != {b['history']}"
     if a["output"] != b["output"]:
         return False, f"output: {a['output']} != {b['output']}"
+    if a.get("line", "") != b.get("line", ""):
+        return False, f"open line: {a.get('line')!r} != {b.get('line')!r}"
     if a["fp"] != b["fp"] or a["sp"] != b["sp"]:
         return False, f"frame pointers: {a['fp']},{a['sp']} != {b['fp']},{b['sp']}"
     return True, ""

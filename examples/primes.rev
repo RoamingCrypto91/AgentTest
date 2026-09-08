@@ -1,0 +1,49 @@
+// Compute-copy-uncompute, written out by hand.
+//
+//   rev run examples/primes.rev
+//
+// `is_prime` is an `embed`, so calling it XORs its verdict into a cell and
+// leaves nothing else behind.  That means the three-line idiom below --
+//
+//     call   is_prime(i, v);      // compute
+//     flags[i] ^= v;              // copy
+//     uncall is_prime(i, v);      // uncompute
+//
+// -- is Bennett's construction applied a second time, at the source level, to
+// keep a whole array of answers without keeping a whole array of scratch.
+
+import "math.rev";
+
+const N = 50;
+
+int flags[N];
+int count;
+
+proc main() {
+    local int i = 0;
+    from i == 0 do {
+        local int v = 0;
+        call is_prime(i, v);
+        flags[i] ^= v;
+        count += v;
+        uncall is_prime(i, v);
+        delocal int v = 0;
+    } loop {
+        i += 1;
+    } until i == len(flags) - 1;
+    delocal int i = len(flags) - 1;
+
+    print "primes below ", N, ": ", count;
+    local int j = 0;
+    from j == 0 do {
+        if flags[j] != 0 {
+            write j, " ";
+        } else {
+            skip;
+        } fi;
+    } loop {
+        j += 1;
+    } until j == len(flags) - 1;
+    delocal int j = len(flags) - 1;
+    print "";
+}

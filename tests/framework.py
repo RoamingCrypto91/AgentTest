@@ -292,7 +292,10 @@ class Runner:
     def selected(self) -> list[TestCase]:
         out = []
         for tc in _REGISTRY:
-            if self.args.k and self.args.k not in tc.full_name:
+            if self.args.k and not any(
+                part.strip() and part.strip() in tc.full_name
+                for part in self.args.k.split(",")
+            ):
                 continue
             if tc.slow and not self.args.slow:
                 continue
@@ -395,7 +398,7 @@ class Runner:
 def main(argv: Optional[list[str]] = None) -> int:
     ap = argparse.ArgumentParser(description="Reverie test runner")
     ap.add_argument("paths", nargs="*", default=None)
-    ap.add_argument("-k", default="", help="substring filter on test name")
+    ap.add_argument("-k", default="", help="substring filter; comma-separated alternatives")
     ap.add_argument("-x", action="store_true", help="stop after first failure")
     ap.add_argument("-v", action="store_true", help="verbose, one line per test")
     ap.add_argument("--slow", action="store_true", help="include slow tests")

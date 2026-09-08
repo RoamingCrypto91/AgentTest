@@ -33,6 +33,7 @@ from .diagnostics import CompileError, Span
 from .ir import (
     AbsA,
     Addr,
+    ArrayLen,
     Bin,
     Const,
     Expr,
@@ -70,15 +71,15 @@ class Compiler:
 
     def base_addr(self, sym: Symbol) -> Addr:
         if sym.kind == "global":
-            return AbsA(sym.addr, sym.name)
+            return AbsA(sym.addr, sym.name, max(sym.length, 1))
         if sym.kind == "local":
-            return LocalA(sym.off, sym.name)
+            return LocalA(sym.off, sym.name, max(sym.length, 1))
         if sym.kind in ("param", "cparam"):
             return ParamA(sym.index, sym.name)
         if sym.kind == "ctemp":
             if self.ctemp_as_param:
                 return ParamA(sym.index, sym.name)
-            return LocalA(sym.off, sym.name)
+            return LocalA(sym.off, sym.name, max(sym.length, 1))
         raise CompileError(  # pragma: no cover
             f"`{sym.name}` has no storage ({sym.kind})", sym.span
         )
@@ -87,7 +88,11 @@ class Compiler:
         sym = self.symbol(node)
         base = self.base_addr(sym)
         if isinstance(node, ast.Index):
-            return IndexA(base, self.expr(node.index), sym.length, sym.name)
+            # Array parameters are bounds-checked against the length the caller
+            # actually passed, never against the declaration, so a procedure
+            # cannot run off the end of a shorter array than it expected.
+            length = -1 if sym.kind in ("param", "cparam") else sym.length
+            return IndexA(base, self.expr(node.index), length, sym.name)
         return base
 
     def arg_addr(self, node: ast.Expr) -> Addr:
@@ -127,6 +132,8 @@ class Compiler:
             return StackQuery(e.name, self.base_addr(sym))
         if e.name == "len":
             sym = self.symbol(e.args[0])
+            if sym.kind in ("param", "cparam"):
+                return ArrayLen(self.base_addr(sym))
             return Const(sym.length)
         raise CompileError(f"unknown builtin `{e.name}`", e.span)  # pragma: no cover
 
@@ -162,15 +169,14 @@ class Compiler:
             expr = None if sym.is_array else self.expr(s.expr)
             return cls(sym.off, expr, sym.length, sym.name, s.span)
         if isinstance(s, ast.Call):
-            args = [self.arg_addr(a) for a in s.args]
-            return rir.RCall(s.name, args, s.uncall, s.span)
+            return self.call(s)
         if isinstance(s, ast.StackOp):
             cls = rir.RPop if s.pop else rir.RPush
             return cls(self.addr_of(s.var), self.addr_of(s.stack), s.span)
         if isinstance(s, ast.Print):
             parts = [p if isinstance(p, str) else self.expr(p) for p in s.parts]
             cls = rir.RUnemit if s.reverse else rir.REmit
-            return cls(parts, s.span)
+            return cls(parts, s.span, s.newline)
         if isinstance(s, ast.Assert):
             return rir.RAssert(self.expr(s.expr), "", s.span)
         if isinstance(s, ast.Undo):
@@ -180,6 +186,37 @@ class Compiler:
         raise CompileError(  # pragma: no cover
             f"cannot compile statement {type(s).__name__}", getattr(s, "span", None)
         )
+
+    def call(self, s: ast.Call) -> rir.RStmt:
+        """A call, wrapping any constant arguments in hidden locals.
+
+        Reverie has no by-value parameters, so a constant argument becomes a
+        cell the caller owns for exactly the duration of the call.  The
+        checker has already established that the callee never writes through
+        it, which is what makes the surrounding ``local``/``delocal`` pair
+        provable.
+        """
+        consts = self.a.const_args.get(id(s), [])
+        by_pos = {c.index: c for c in consts}
+        args: list[Addr] = []
+        for i, arg in enumerate(s.args):
+            c = by_pos.get(i)
+            if c is not None:
+                args.append(LocalA(c.off, c.name))
+            else:
+                args.append(self.arg_addr(arg))
+        core = rir.RCall(s.name, args, s.uncall, s.span)
+        if not consts:
+            return core
+        out: list[rir.RStmt] = [
+            rir.RLocal(c.off, Const(c.value), 1, c.name, s.span) for c in consts
+        ]
+        out.append(core)
+        out.extend(
+            rir.RDelocal(c.off, Const(c.value), 1, c.name, s.span)
+            for c in reversed(consts)
+        )
+        return rir.RSeq(out, s.span)
 
     # -- Bennett's construction ------------------------------------------
     def embed(self, s: ast.Embed) -> rir.RStmt:

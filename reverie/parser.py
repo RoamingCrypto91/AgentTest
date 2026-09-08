@@ -264,8 +264,10 @@ class Parser:
             self.expect_op(")", "to close push/pop")
             self.expect_op(";", "after push/pop")
             return ast.StackOp(self.span_from(start), var, stack, is_pop)
-        if self.at_kw("print", "unprint"):
-            reverse = self.advance().text == "unprint"
+        if self.at_kw("print", "unprint", "write", "unwrite"):
+            word = self.advance().text
+            reverse = word.startswith("un")
+            newline = word.endswith("print")
             parts: list[object] = []
             if not self.at_op(";"):
                 while True:
@@ -276,7 +278,7 @@ class Parser:
                     if not self.accept_op(","):
                         break
             self.expect_op(";", "after `print`")
-            return ast.Print(self.span_from(start), parts, reverse)
+            return ast.Print(self.span_from(start), parts, reverse, newline)
         if self.at_kw("assert"):
             self.advance()
             expr = self.parse_expr()
