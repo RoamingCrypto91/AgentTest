@@ -31,6 +31,8 @@ def build(path, require_main=True):
 
 #: initial state each example expects
 INPUTS = {
+    "first.rev": {"n": 21},
+    "tour.rev": {"n": 1000000},
     "countdown.rev": {"n": 7},
     "fibonacci.rev": {"n": 9},
     "rle.rev": {"data": [1, 1, 1, 4, 4, 7, 7, 7, 7, 7, 2, 2, 9, 9, 9, 3]},
@@ -188,6 +190,19 @@ def test_arrays_library_demo():
         got ^= v
     eq(forward["checksum"], got)
     eq(forward["xs"], list(reversed(xs)))
+
+
+def test_tour_computes_an_integer_square_root():
+    import math
+
+    forward, _, _ = _run_example("tour.rev")
+    eq(forward["root"], math.isqrt(1000000))
+    eq(forward["rem"], 0)
+
+
+def test_first_doubles():
+    forward, _, _ = _run_example("first.rev")
+    eq(forward["total"], 42)
 
 
 def test_countdown_sums():

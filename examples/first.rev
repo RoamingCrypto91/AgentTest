@@ -1,0 +1,11 @@
+// The smallest complete Reverie program, from docs/TUTORIAL.md.
+//
+//   rev run  examples/first.rev --set n=21
+//   rev back examples/first.rev --set n=21
+
+int n;
+int total;
+
+proc main() {
+    total += n * 2;
+}

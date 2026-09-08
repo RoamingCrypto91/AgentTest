@@ -6,6 +6,11 @@ in reverse, and ``goto 400`` from step 900 executes five hundred inverse
 instructions.  Memory cost: zero.  The state you land on is not a reconstruction
 of the state you were in -- it *is* that state.
 
+The prompt reads ``[t=<time>] <arrow> <pc>:<line>  <instruction>``.  The arrow
+is the direction of *logical time*; a following ``~`` means the machine is
+executing a procedure against that direction, which is what ``uncall`` looks
+like from the outside.
+
 Commands (abbreviations in brackets)::
 
     step [n]      [s]   run n instructions in the current direction
@@ -101,7 +106,12 @@ class Debugger:
 
     def prompt(self) -> str:
         m = self.machine
-        arrow = self.c("->", "32;1") if m.dir > 0 else self.c("<-", "35;1")
+        arrow = self.c("->", "32;1") if m.arrow > 0 else self.c("<-", "35;1")
+        if m.dir != m.arrow:
+            # inside an `uncall`: the procedure runs against the arrow of time
+            arrow += self.c("~", "36;1")
+        else:
+            arrow += " "
         ins = self.current()
         text = ins.render() if ins is not None else "<end>"
         line = self.current_line()
@@ -217,11 +227,11 @@ class Debugger:
             new = g.get(name)
             old = self.last_watch.get(name, "<unset>")
             if new != old:
-                arrow = "->" if self.machine.dir > 0 else "<-"
+                arrow = "->" if self.machine.arrow > 0 else "<-"
                 self.say(
                     self.c(
                         f"  watch {name}: {old} {arrow} {new}"
-                        f"  (step {self.machine.stats.steps})",
+                        f"  (t = {self.machine.position})",
                         "33",
                     )
                 )

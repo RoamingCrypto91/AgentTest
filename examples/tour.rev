@@ -1,0 +1,18 @@
+// Integer square root, written the ordinary destructive way -- the worked
+// example from docs/TUTORIAL.md.
+//
+//   rev doctor examples/tour.rev --set n=1000000
+//   rev viz    examples/tour.rev --set n=1000000 -o tour.html
+
+int n;
+int root;
+int rem;
+
+proc main() {
+    embed (root ^= r, rem ^= n - r * r) {
+        var r = 0;
+        while ((r + 1) * (r + 1) <= n) {
+            r = r + 1;
+        }
+    }
+}
