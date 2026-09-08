@@ -1,0 +1,1103 @@
+"""The Reverie reversible instruction set.
+
+Every instruction implements two methods, ``forward`` and ``backward``, and the
+machine is required to satisfy::
+
+    backward(forward(state)) == state    and    forward(backward(state)) == state
+
+for every reachable state.  That is not a comment describing an aspiration -- it
+is the property the fuzzer in ``tests/test_roundtrip.py`` checks on hundreds of
+thousands of randomly generated programs.
+
+Control flow is *structured and paired*.  A classical machine can jump anywhere
+because forgetting where you came from is free; a reversible machine cannot.
+So each control construct is a matched set of instructions that record enough
+in the code itself (not in a runtime history) to be walked in either direction:
+
+    IF c1 ... ELSE_END c2 / ELSE_BEGIN c1 ... FI c2
+    FROM c1 ... UNTIL c2 ... REPEAT
+
+The ``C``-prefixed instructions are the exception: they implement *classical*
+(irreversible) statements by pushing the discarded information onto a history
+tape.  They are only emitted inside ``embed`` blocks, whose compute phase is
+always paired with an uncompute phase that drains the tape back to empty --
+Bennett's construction.  See :mod:`reverie.lowering.embed`.
+
+**The program counter is a boundary index.**  ``pc == k`` names the point
+*between* instruction ``k-1`` and instruction ``k``.  Running forwards executes
+``code[pc]``; running backwards executes ``code[pc - 1]``.  Both directions then
+agree about what ``pc`` means, so reversing the machine mid-run is a matter of
+flipping one sign -- no bookkeeping, no saved history, no "where did I come
+from?".  Every ``backward`` method below leaves ``pc`` pointing at the boundary
+*above* the next instruction to undo.
+"""
+
+from __future__ import annotations
+
+from typing import Optional, Sequence
+
+from .diagnostics import RuntimeFault, Span
+from .ir import Addr, Expr, IndexA, idiv
+
+# ---------------------------------------------------------------------------
+# base
+# ---------------------------------------------------------------------------
+
+
+class Instr:
+    """Base class for every instruction."""
+
+    __slots__ = ("at", "span")
+    name = "?"
+    #: instructions that must never be reached in the forward direction
+    forward_unreachable = False
+
+    def __init__(self, span: Optional[Span] = None) -> None:
+        self.at = -1
+        self.span = span
+
+    # -- execution --------------------------------------------------------
+    def forward(self, m) -> None:  # pragma: no cover - abstract
+        raise NotImplementedError
+
+    def backward(self, m) -> None:  # pragma: no cover - abstract
+        raise NotImplementedError
+
+    # -- presentation -----------------------------------------------------
+    def operands(self) -> str:
+        return ""
+
+    def render(self) -> str:
+        ops = self.operands()
+        return f"{self.name} {ops}".rstrip()
+
+    def __repr__(self) -> str:
+        return f"<{self.at}: {self.render()}>"
+
+    #: addresses/expressions referenced, for analysis and the visualizer
+    def refs(self) -> Sequence[Addr | Expr]:
+        return ()
+
+
+class Nop(Instr):
+    __slots__ = ()
+    name = "nop"
+
+    def forward(self, m) -> None:
+        m.pc += 1
+
+    def backward(self, m) -> None:
+        m.pc -= 1
+
+
+class Halt(Instr):
+    __slots__ = ()
+    name = "halt"
+
+    def forward(self, m) -> None:
+        m.halted = True
+
+    def backward(self, m) -> None:
+        m.halted = True
+
+
+# ---------------------------------------------------------------------------
+# reversible store updates
+# ---------------------------------------------------------------------------
+
+#: forward operator -> backward operator
+UPDATE_INVERSE = {
+    "+": "-",
+    "-": "+",
+    "^": "^",
+    "*": "/",
+    "/": "*",
+    "<<": ">>",
+    ">>": "<<",
+}
+
+
+def _apply_update(op: str, cur: int, v: int, m) -> int:
+    if op == "+":
+        return cur + v
+    if op == "-":
+        return cur - v
+    if op == "^":
+        return cur ^ v
+    if op == "*":
+        if v == 0:
+            raise RuntimeFault(
+                "`*=` by zero destroys information",
+                notes=["multiplying by zero is not injective; Reverie refuses to erase"],
+            )
+        return cur * v
+    if op == "/":
+        if v == 0:
+            raise RuntimeFault("`/=` by zero")
+        if cur % v != 0:
+            raise RuntimeFault(
+                f"`/=` is not exact: {cur} is not divisible by {v}",
+                notes=["a lossy division would erase the remainder"],
+            )
+        return idiv(cur, v)
+    if op == "<<":
+        if v < 0:
+            raise RuntimeFault(f"negative shift {v}")
+        if v > 1 << 20:
+            raise RuntimeFault(f"shift {v} too large")
+        return cur << v
+    if op == ">>":
+        if v < 0:
+            raise RuntimeFault(f"negative shift {v}")
+        if cur & ((1 << v) - 1):
+            raise RuntimeFault(
+                f"`>>=` by {v} would discard {v} nonzero low bits",
+                notes=["shifting out set bits erases information"],
+            )
+        return cur >> v
+    raise RuntimeFault(f"unknown update operator {op!r}")  # pragma: no cover
+
+
+class Update(Instr):
+    """``addr op= expr`` -- the workhorse reversible instruction."""
+
+    __slots__ = ("op", "addr", "expr")
+    name = "upd"
+
+    def __init__(self, op: str, addr: Addr, expr: Expr, span: Optional[Span] = None) -> None:
+        super().__init__(span)
+        if op not in UPDATE_INVERSE:
+            raise ValueError(f"non-invertible update operator {op!r}")
+        self.op = op
+        self.addr = addr
+        self.expr = expr
+
+    def forward(self, m) -> None:
+        a = self.addr.resolve(m)
+        m.mem[a] = _apply_update(self.op, m.mem[a], self.expr.eval(m), m)
+        m.pc += 1
+
+    def backward(self, m) -> None:
+        a = self.addr.resolve(m)
+        m.mem[a] = _apply_update(UPDATE_INVERSE[self.op], m.mem[a], self.expr.eval(m), m)
+        m.pc -= 1
+
+    def operands(self) -> str:
+        return f"{self.addr.render()} {self.op}= {self.expr.render()}"
+
+    def refs(self):
+        return (self.addr, self.expr)
+
+
+#: in-place unary operators, each its own inverse
+UNARY_INPLACE = {
+    "neg": lambda v: -v,
+    "not": lambda v: ~v,
+}
+
+
+class UnaryUpdate(Instr):
+    """Self-inverse in-place operations: ``neg x`` and ``not x``."""
+
+    __slots__ = ("op", "addr")
+    name = "un"
+
+    def __init__(self, op: str, addr: Addr, span: Optional[Span] = None) -> None:
+        super().__init__(span)
+        if op not in UNARY_INPLACE:
+            raise ValueError(f"unknown in-place unary {op!r}")
+        self.op = op
+        self.addr = addr
+
+    def forward(self, m) -> None:
+        a = self.addr.resolve(m)
+        m.mem[a] = UNARY_INPLACE[self.op](m.mem[a])
+        m.pc += 1
+
+    backward = None  # filled in below
+
+    def operands(self) -> str:
+        return f"{self.op} {self.addr.render()}"
+
+    def refs(self):
+        return (self.addr,)
+
+
+def _unary_backward(self, m) -> None:
+    a = self.addr.resolve(m)
+    m.mem[a] = UNARY_INPLACE[self.op](m.mem[a])
+    m.pc -= 1
+
+
+UnaryUpdate.backward = _unary_backward
+
+
+class Swap(Instr):
+    """``a <=> b`` -- self-inverse."""
+
+    __slots__ = ("a", "b")
+    name = "swap"
+
+    def __init__(self, a: Addr, b: Addr, span: Optional[Span] = None) -> None:
+        super().__init__(span)
+        self.a = a
+        self.b = b
+
+    def _do(self, m) -> None:
+        ia = self.a.resolve(m)
+        ib = self.b.resolve(m)
+        m.mem[ia], m.mem[ib] = m.mem[ib], m.mem[ia]
+
+    def forward(self, m) -> None:
+        self._do(m)
+        m.pc += 1
+
+    def backward(self, m) -> None:
+        self._do(m)
+        m.pc -= 1
+
+    def operands(self) -> str:
+        return f"{self.a.render()} <=> {self.b.render()}"
+
+    def refs(self):
+        return (self.a, self.b)
+
+
+class Assert(Instr):
+    """``assert e`` -- self-inverse; traps if *e* is zero."""
+
+    __slots__ = ("expr", "message")
+    name = "assert"
+
+    def __init__(self, expr: Expr, message: str = "", span: Optional[Span] = None) -> None:
+        super().__init__(span)
+        self.expr = expr
+        self.message = message
+
+    def _check(self, m) -> None:
+        if self.expr.eval(m) == 0:
+            raise RuntimeFault(
+                self.message or f"assertion failed: {self.expr.render()}", pc=self.at
+            )
+
+    def forward(self, m) -> None:
+        self._check(m)
+        m.pc += 1
+
+    def backward(self, m) -> None:
+        self._check(m)
+        m.pc -= 1
+
+    def operands(self) -> str:
+        return self.expr.render()
+
+    def refs(self):
+        return (self.expr,)
+
+
+# ---------------------------------------------------------------------------
+# local storage: allocation is an assertion, deallocation is an assertion
+# ---------------------------------------------------------------------------
+
+
+class LocalAlloc(Instr):
+    """``local x = e`` -- the cell must be zero beforehand and holds *e* after."""
+
+    __slots__ = ("off", "expr", "size", "vname")
+    name = "local"
+
+    def __init__(
+        self,
+        off: int,
+        expr: Optional[Expr],
+        size: int = 1,
+        vname: str = "",
+        span: Optional[Span] = None,
+    ) -> None:
+        super().__init__(span)
+        self.off = off
+        self.expr = expr
+        self.size = size
+        self.vname = vname
+
+    def _alloc(self, m) -> None:
+        base = m.fp + self.off
+        for i in range(self.size):
+            if m.mem[base + i] != 0:
+                raise RuntimeFault(
+                    f"`local {self.vname}` requires a zeroed cell, found {m.mem[base + i]}",
+                    pc=self.at,
+                )
+        if self.expr is not None:
+            m.mem[base] = self.expr.eval(m)
+
+    def _free(self, m) -> None:
+        base = m.fp + self.off
+        if self.expr is not None:
+            want = self.expr.eval(m)
+            got = m.mem[base]
+            if got != want:
+                raise RuntimeFault(
+                    f"`delocal {self.vname}` expected {want} but the cell holds {got}",
+                    pc=self.at,
+                    notes=[
+                        "the delocal expression must reconstruct the value so the cell",
+                        "can be released without erasing information",
+                    ],
+                )
+            m.mem[base] = 0
+        else:
+            for i in range(self.size):
+                if m.mem[base + i] != 0:
+                    raise RuntimeFault(
+                        f"`delocal {self.vname}` requires all cells zeroed; "
+                        f"element {i} holds {m.mem[base + i]}",
+                        pc=self.at,
+                    )
+
+    def forward(self, m) -> None:
+        self._alloc(m)
+        m.pc += 1
+
+    def backward(self, m) -> None:
+        self._free(m)
+        m.pc -= 1
+
+    def operands(self) -> str:
+        if self.expr is None:
+            return f"%{self.off}[{self.size}]"
+        return f"%{self.off} = {self.expr.render()}"
+
+    def refs(self):
+        return (self.expr,) if self.expr is not None else ()
+
+
+class LocalFree(LocalAlloc):
+    """``delocal x = e`` -- the exact inverse of :class:`LocalAlloc`."""
+
+    __slots__ = ()
+    name = "delocal"
+
+    def forward(self, m) -> None:
+        self._free(m)
+        m.pc += 1
+
+    def backward(self, m) -> None:
+        self._alloc(m)
+        m.pc -= 1
+
+
+# ---------------------------------------------------------------------------
+# stacks -- push/pop are exact inverses because push zeroes its source
+# ---------------------------------------------------------------------------
+
+
+class StackPush(Instr):
+    """``push(x, s)``: pushes *x* onto *s* and leaves *x* zero."""
+
+    __slots__ = ("var", "stack")
+    name = "push"
+
+    def __init__(self, var: Addr, stack: Addr, span: Optional[Span] = None) -> None:
+        super().__init__(span)
+        self.var = var
+        self.stack = stack
+
+    def _push(self, m) -> None:
+        a = self.var.resolve(m)
+        st = m.stack_at(self.stack.resolve(m))
+        st.append(m.mem[a])
+        m.mem[a] = 0
+
+    def _pop(self, m) -> None:
+        a = self.var.resolve(m)
+        if m.mem[a] != 0:
+            raise RuntimeFault(
+                f"`pop` requires a zeroed target, found {m.mem[a]}", pc=self.at
+            )
+        st = m.stack_at(self.stack.resolve(m))
+        if not st:
+            raise RuntimeFault("`pop` from an empty stack", pc=self.at)
+        m.mem[a] = st.pop()
+
+    def forward(self, m) -> None:
+        self._push(m)
+        m.pc += 1
+
+    def backward(self, m) -> None:
+        self._pop(m)
+        m.pc -= 1
+
+    def operands(self) -> str:
+        return f"{self.var.render()}, {self.stack.render()}"
+
+    def refs(self):
+        return (self.var, self.stack)
+
+
+class StackPop(StackPush):
+    """``pop(x, s)``: the exact inverse of :class:`StackPush`."""
+
+    __slots__ = ()
+    name = "pop"
+
+    def forward(self, m) -> None:
+        self._pop(m)
+        m.pc += 1
+
+    def backward(self, m) -> None:
+        self._push(m)
+        m.pc -= 1
+
+
+# ---------------------------------------------------------------------------
+# output -- printing is reversible if you un-print on the way back
+# ---------------------------------------------------------------------------
+
+
+class Emit(Instr):
+    """``print`` -- appends a line to the output log; rewinding removes it."""
+
+    __slots__ = ("parts",)
+    name = "emit"
+
+    def __init__(self, parts: Sequence[object], span: Optional[Span] = None) -> None:
+        super().__init__(span)
+        self.parts = list(parts)
+
+    def _text(self, m) -> str:
+        out = []
+        for p in self.parts:
+            if isinstance(p, str):
+                out.append(p)
+            else:
+                out.append(str(p.eval(m)))
+        return "".join(out)
+
+    def forward(self, m) -> None:
+        m.output.append(self._text(m))
+        m.pc += 1
+
+    def _consume(self, m) -> None:
+        if not m.output:
+            raise RuntimeFault("cannot un-print: the output log is empty", pc=self.at)
+        expect = self._text(m)
+        got = m.output.pop()
+        if got != expect:
+            raise RuntimeFault(
+                f"un-print mismatch: the log holds {got!r} but the instruction "
+                f"reproduces {expect!r}",
+                pc=self.at,
+            )
+
+    def backward(self, m) -> None:
+        self._consume(m)
+        m.pc -= 1
+
+    def operands(self) -> str:
+        bits = []
+        for p in self.parts:
+            bits.append(repr(p) if isinstance(p, str) else p.render())
+        return ", ".join(bits)
+
+    def refs(self):
+        return tuple(p for p in self.parts if not isinstance(p, str))
+
+
+class Unemit(Emit):
+    """The inverse of :class:`Emit`: consumes a line of output.
+
+    This is what ``print`` becomes when a program is inverted.  An inverted
+    program does not print its output again -- it *un-prints* it, consuming the
+    log the forward program produced.  Output is information like any other.
+    """
+
+    __slots__ = ()
+    name = "unemit"
+
+    def forward(self, m) -> None:
+        self._consume(m)
+        m.pc += 1
+
+    def backward(self, m) -> None:
+        m.output.append(self._text(m))
+        m.pc -= 1
+
+
+# ---------------------------------------------------------------------------
+# reversible conditional
+# ---------------------------------------------------------------------------
+
+
+class If(Instr):
+    __slots__ = ("cond", "else_begin", "fi")
+    name = "if"
+
+    def __init__(self, cond: Expr, span: Optional[Span] = None) -> None:
+        super().__init__(span)
+        self.cond = cond
+        self.else_begin = -1
+        self.fi = -1
+
+    def forward(self, m) -> None:
+        m.pc = self.at + 1 if self.cond.eval(m) != 0 else self.else_begin + 1
+
+    def backward(self, m) -> None:
+        if self.cond.eval(m) == 0:
+            raise RuntimeFault(
+                "reverse-entering the then-branch requires the entry test to hold",
+                pc=self.at,
+            )
+        m.pc = self.at
+
+    def operands(self) -> str:
+        return f"{self.cond.render()} else->{self.else_begin} fi->{self.fi}"
+
+    def refs(self):
+        return (self.cond,)
+
+
+class ElseEnd(Instr):
+    """Closes the then-branch: asserts the exit test and jumps past ``fi``."""
+
+    __slots__ = ("exit_cond", "fi")
+    name = "else_end"
+
+    def __init__(self, exit_cond: Expr, span: Optional[Span] = None) -> None:
+        super().__init__(span)
+        self.exit_cond = exit_cond
+        self.fi = -1
+
+    def forward(self, m) -> None:
+        if self.exit_cond.eval(m) == 0:
+            raise RuntimeFault(
+                f"exit assertion `{self.exit_cond.render()}` must hold after the "
+                f"then-branch, otherwise the conditional could not be reversed",
+                pc=self.at,
+            )
+        m.pc = self.fi + 1
+
+    def backward(self, m) -> None:
+        m.pc = self.at
+
+    def operands(self) -> str:
+        return f"{self.exit_cond.render()} fi->{self.fi}"
+
+    def refs(self):
+        return (self.exit_cond,)
+
+
+class ElseBegin(Instr):
+    """Opens the else-branch; only ever executed in the backward direction."""
+
+    __slots__ = ("cond", "if_at")
+    name = "else_begin"
+    forward_unreachable = True
+
+    def __init__(self, cond: Expr, span: Optional[Span] = None) -> None:
+        super().__init__(span)
+        self.cond = cond
+        self.if_at = -1
+
+    def forward(self, m) -> None:  # pragma: no cover - unreachable by construction
+        raise RuntimeFault("fell into else_begin going forward", pc=self.at)
+
+    def backward(self, m) -> None:
+        if self.cond.eval(m) != 0:
+            raise RuntimeFault(
+                "reverse-entering the else-branch requires the entry test to fail",
+                pc=self.at,
+            )
+        m.pc = self.if_at
+
+    def operands(self) -> str:
+        return f"{self.cond.render()} if->{self.if_at}"
+
+    def refs(self):
+        return (self.cond,)
+
+
+class Fi(Instr):
+    __slots__ = ("exit_cond", "then_end", "else_end", "if_at")
+    name = "fi"
+
+    def __init__(self, exit_cond: Expr, span: Optional[Span] = None) -> None:
+        super().__init__(span)
+        self.exit_cond = exit_cond
+        self.then_end = -1
+        self.else_end = -1
+        self.if_at = -1
+
+    def forward(self, m) -> None:
+        if self.exit_cond.eval(m) != 0:
+            raise RuntimeFault(
+                f"exit assertion `{self.exit_cond.render()}` must fail after the "
+                f"else-branch, otherwise the conditional could not be reversed",
+                pc=self.at,
+            )
+        m.pc = self.at + 1
+
+    def backward(self, m) -> None:
+        m.pc = (self.then_end if self.exit_cond.eval(m) != 0 else self.else_end) + 1
+
+    def operands(self) -> str:
+        return f"{self.exit_cond.render()} then_end->{self.then_end} else_end->{self.else_end}"
+
+    def refs(self):
+        return (self.exit_cond,)
+
+
+# ---------------------------------------------------------------------------
+# reversible loop:  from c1 do S1 loop S2 until c2
+# ---------------------------------------------------------------------------
+
+
+class From(Instr):
+    __slots__ = ("entry_cond", "until", "repeat")
+    name = "from"
+
+    def __init__(self, entry_cond: Expr, span: Optional[Span] = None) -> None:
+        super().__init__(span)
+        self.entry_cond = entry_cond
+        self.until = -1
+        self.repeat = -1
+
+    def forward(self, m) -> None:
+        if self.entry_cond.eval(m) == 0:
+            raise RuntimeFault(
+                f"loop entry assertion `{self.entry_cond.render()}` must hold on "
+                f"the first arrival",
+                pc=self.at,
+            )
+        m.pc = self.at + 1
+
+    def backward(self, m) -> None:
+        # Running backwards, the entry test becomes the loop's exit test.
+        m.pc = self.at if self.entry_cond.eval(m) != 0 else self.repeat
+
+    def operands(self) -> str:
+        return f"{self.entry_cond.render()} until->{self.until} repeat->{self.repeat}"
+
+    def refs(self):
+        return (self.entry_cond,)
+
+
+class Until(Instr):
+    __slots__ = ("exit_cond", "from_at", "repeat")
+    name = "until"
+
+    def __init__(self, exit_cond: Expr, span: Optional[Span] = None) -> None:
+        super().__init__(span)
+        self.exit_cond = exit_cond
+        self.from_at = -1
+        self.repeat = -1
+
+    def forward(self, m) -> None:
+        m.pc = self.repeat + 1 if self.exit_cond.eval(m) != 0 else self.at + 1
+
+    def backward(self, m) -> None:
+        if self.exit_cond.eval(m) != 0:
+            raise RuntimeFault(
+                f"loop exit assertion `{self.exit_cond.render()}` must fail when "
+                f"re-entering the loop backwards",
+                pc=self.at,
+            )
+        m.pc = self.at
+
+    def operands(self) -> str:
+        return f"{self.exit_cond.render()} from->{self.from_at} repeat->{self.repeat}"
+
+    def refs(self):
+        return (self.exit_cond,)
+
+
+class Repeat(Instr):
+    """Closes the loop; also the backward entry point into it."""
+
+    __slots__ = ("entry_cond", "exit_cond", "from_at", "until")
+    name = "repeat"
+
+    def __init__(
+        self, entry_cond: Expr, exit_cond: Expr, span: Optional[Span] = None
+    ) -> None:
+        super().__init__(span)
+        self.entry_cond = entry_cond
+        self.exit_cond = exit_cond
+        self.from_at = -1
+        self.until = -1
+
+    def forward(self, m) -> None:
+        if self.entry_cond.eval(m) != 0:
+            raise RuntimeFault(
+                f"loop entry assertion `{self.entry_cond.render()}` must fail on "
+                f"every arrival after the first",
+                pc=self.at,
+            )
+        m.pc = self.from_at + 1
+
+    def backward(self, m) -> None:
+        if self.exit_cond.eval(m) == 0:
+            raise RuntimeFault(
+                f"reverse-entering the loop requires `{self.exit_cond.render()}` to hold",
+                pc=self.at,
+            )
+        m.pc = self.until
+
+    def operands(self) -> str:
+        return (
+            f"entry={self.entry_cond.render()} exit={self.exit_cond.render()} "
+            f"from->{self.from_at} until->{self.until}"
+        )
+
+    def refs(self):
+        return (self.entry_cond, self.exit_cond)
+
+
+# ---------------------------------------------------------------------------
+# procedures
+# ---------------------------------------------------------------------------
+
+
+class Call(Instr):
+    """``call p(...)`` / ``uncall p(...)``.
+
+    Arguments are passed by reference: the *address* each argument resolves to
+    is recorded in the callee's frame.  Because those addresses live in the
+    control stack rather than the data store, entering and leaving a procedure
+    erases nothing.
+    """
+
+    __slots__ = ("proc", "args", "uncall")
+    name = "call"
+
+    def __init__(
+        self,
+        proc: str,
+        args: Sequence[Addr],
+        uncall: bool = False,
+        span: Optional[Span] = None,
+    ) -> None:
+        super().__init__(span)
+        self.proc = proc
+        self.args = list(args)
+        self.uncall = uncall
+
+    def _enter(self, m, ret_pc: int, ret_dir: int, reverse: bool) -> None:
+        info = m.program.procs.get(self.proc)
+        if info is None:
+            raise RuntimeFault(f"call to unknown procedure `{self.proc}`", pc=self.at)
+        if len(self.args) != info.arity:
+            raise RuntimeFault(
+                f"`{self.proc}` expects {info.arity} arguments, got {len(self.args)}",
+                pc=self.at,
+            )
+        params = [a.resolve(m) for a in self.args]
+        m.enter_frame(info, params, ret_pc, ret_dir)
+        if reverse:
+            m.pc = info.exit_at + 1
+            m.dir = -1
+        else:
+            m.pc = info.entry_at
+            m.dir = 1
+
+    def forward(self, m) -> None:
+        self._enter(m, self.at + 1, 1, reverse=self.uncall)
+
+    def backward(self, m) -> None:
+        self._enter(m, self.at, -1, reverse=not self.uncall)
+
+    def operands(self) -> str:
+        args = ", ".join(a.render() for a in self.args)
+        kind = "uncall" if self.uncall else "call"
+        return f"{kind} {self.proc}({args})"
+
+    def render(self) -> str:
+        return self.operands()
+
+    def refs(self):
+        return tuple(self.args)
+
+
+class ProcEntry(Instr):
+    __slots__ = ("proc",)
+    name = "entry"
+
+    def __init__(self, proc: str, span: Optional[Span] = None) -> None:
+        super().__init__(span)
+        self.proc = proc
+
+    def forward(self, m) -> None:
+        m.pc += 1
+
+    def backward(self, m) -> None:
+        m.leave_frame(self.at)
+
+    def operands(self) -> str:
+        return self.proc
+
+
+class ProcExit(Instr):
+    __slots__ = ("proc",)
+    name = "exit"
+
+    def __init__(self, proc: str, span: Optional[Span] = None) -> None:
+        super().__init__(span)
+        self.proc = proc
+
+    def forward(self, m) -> None:
+        m.leave_frame(self.at)
+
+    def backward(self, m) -> None:
+        m.pc -= 1
+
+    def operands(self) -> str:
+        return self.proc
+
+
+# ---------------------------------------------------------------------------
+# classical (history-backed) instructions, emitted only inside `embed`
+# ---------------------------------------------------------------------------
+
+
+class CSet(Instr):
+    """``x = e`` -- classical assignment; the overwritten value goes on the tape."""
+
+    __slots__ = ("addr", "expr", "dynamic")
+    name = "cset"
+
+    def __init__(self, addr: Addr, expr: Expr, span: Optional[Span] = None) -> None:
+        super().__init__(span)
+        self.addr = addr
+        self.expr = expr
+        # An indexed target's address may itself depend on the cell being
+        # written, so record the resolved address alongside the old value.
+        self.dynamic = isinstance(addr, IndexA)
+
+    def forward(self, m) -> None:
+        a = self.addr.resolve(m)
+        v = self.expr.eval(m)
+        m.history.append(m.mem[a])
+        if self.dynamic:
+            m.history.append(a)
+        m.mem[a] = v
+        m.pc += 1
+
+    def backward(self, m) -> None:
+        if not m.history:
+            raise RuntimeFault("history tape underflow in cset", pc=self.at)
+        a = m.history.pop() if self.dynamic else self.addr.resolve(m)
+        if not m.history:
+            raise RuntimeFault("history tape underflow in cset", pc=self.at)
+        m.mem[a] = m.history.pop()
+        m.pc -= 1
+
+    def operands(self) -> str:
+        return f"{self.addr.render()} = {self.expr.render()}"
+
+    def refs(self):
+        return (self.addr, self.expr)
+
+
+class CIf(Instr):
+    __slots__ = ("cond", "else_begin", "fi")
+    name = "cif"
+
+    def __init__(self, cond: Expr, span: Optional[Span] = None) -> None:
+        super().__init__(span)
+        self.cond = cond
+        self.else_begin = -1
+        self.fi = -1
+
+    def forward(self, m) -> None:
+        v = 1 if self.cond.eval(m) != 0 else 0
+        m.history.append(v)
+        m.pc = self.at + 1 if v else self.else_begin + 1
+
+    def backward(self, m) -> None:
+        m.pc = self.at
+
+    def operands(self) -> str:
+        return f"{self.cond.render()} else->{self.else_begin} fi->{self.fi}"
+
+    def refs(self):
+        return (self.cond,)
+
+
+class CElseEnd(Instr):
+    __slots__ = ("fi",)
+    name = "celse_end"
+
+    def __init__(self, span: Optional[Span] = None) -> None:
+        super().__init__(span)
+        self.fi = -1
+
+    def forward(self, m) -> None:
+        m.pc = self.fi + 1
+
+    def backward(self, m) -> None:
+        m.pc = self.at
+
+    def operands(self) -> str:
+        return f"fi->{self.fi}"
+
+
+class CElseBegin(Instr):
+    __slots__ = ("if_at",)
+    name = "celse_begin"
+    forward_unreachable = True
+
+    def __init__(self, span: Optional[Span] = None) -> None:
+        super().__init__(span)
+        self.if_at = -1
+
+    def forward(self, m) -> None:  # pragma: no cover - unreachable by construction
+        raise RuntimeFault("fell into celse_begin going forward", pc=self.at)
+
+    def backward(self, m) -> None:
+        m.pc = self.if_at
+
+    def operands(self) -> str:
+        return f"if->{self.if_at}"
+
+
+class CFi(Instr):
+    __slots__ = ("then_end", "else_end", "if_at")
+    name = "cfi"
+
+    def __init__(self, span: Optional[Span] = None) -> None:
+        super().__init__(span)
+        self.then_end = -1
+        self.else_end = -1
+        self.if_at = -1
+
+    def forward(self, m) -> None:
+        m.pc = self.at + 1
+
+    def backward(self, m) -> None:
+        if not m.history:
+            raise RuntimeFault("history tape underflow in cfi", pc=self.at)
+        v = m.history.pop()
+        m.pc = (self.then_end if v else self.else_end) + 1
+
+    def operands(self) -> str:
+        return f"then_end->{self.then_end} else_end->{self.else_end}"
+
+
+class CHead(Instr):
+    """Head of a classical ``while``.  Counts iterations into a frame cell."""
+
+    __slots__ = ("cond", "counter", "tail", "exit_at")
+    name = "chead"
+
+    def __init__(self, cond: Expr, counter: int, span: Optional[Span] = None) -> None:
+        super().__init__(span)
+        self.cond = cond
+        self.counter = counter
+        self.tail = -1
+        self.exit_at = -1
+
+    def forward(self, m) -> None:
+        c = m.fp + self.counter
+        if self.cond.eval(m) != 0:
+            m.mem[c] += 1
+            m.pc = self.at + 1
+        else:
+            m.history.append(m.mem[c])
+            m.mem[c] = 0
+            m.pc = self.exit_at + 1
+
+    def backward(self, m) -> None:
+        c = m.fp + self.counter
+        m.mem[c] -= 1
+        m.pc = self.tail + 1 if m.mem[c] > 0 else self.at
+
+    def operands(self) -> str:
+        return f"{self.cond.render()} cnt=%{self.counter} exit->{self.exit_at}"
+
+    def refs(self):
+        return (self.cond,)
+
+
+class CTail(Instr):
+    __slots__ = ("head",)
+    name = "ctail"
+
+    def __init__(self, span: Optional[Span] = None) -> None:
+        super().__init__(span)
+        self.head = -1
+
+    def forward(self, m) -> None:
+        m.pc = self.head
+
+    def backward(self, m) -> None:
+        m.pc = self.at
+
+    def operands(self) -> str:
+        return f"head->{self.head}"
+
+
+class CExit(Instr):
+    """Backward entry point of a classical loop; unreachable going forward."""
+
+    __slots__ = ("head", "tail", "counter")
+    name = "cexit"
+    forward_unreachable = True
+
+    def __init__(self, counter: int, span: Optional[Span] = None) -> None:
+        super().__init__(span)
+        self.counter = counter
+        self.head = -1
+        self.tail = -1
+
+    def forward(self, m) -> None:  # pragma: no cover - unreachable by construction
+        raise RuntimeFault("fell into cexit going forward", pc=self.at)
+
+    def backward(self, m) -> None:
+        c = m.fp + self.counter
+        if m.mem[c] != 0:
+            raise RuntimeFault("classical loop counter was not zero on exit", pc=self.at)
+        if not m.history:
+            raise RuntimeFault("history tape underflow in cexit", pc=self.at)
+        m.mem[c] = m.history.pop()
+        m.pc = self.tail + 1 if m.mem[c] > 0 else self.head
+
+    def operands(self) -> str:
+        return f"head->{self.head} tail->{self.tail} cnt=%{self.counter}"
+
+
+#: every instruction class, keyed by mnemonic -- used by the assembler
+INSTRUCTIONS = {
+    cls.name: cls
+    for cls in (
+        Nop,
+        Halt,
+        Update,
+        UnaryUpdate,
+        Swap,
+        Assert,
+        LocalAlloc,
+        LocalFree,
+        StackPush,
+        StackPop,
+        Emit,
+        Unemit,
+        If,
+        ElseEnd,
+        ElseBegin,
+        Fi,
+        From,
+        Until,
+        Repeat,
+        Call,
+        ProcEntry,
+        ProcExit,
+        CSet,
+        CIf,
+        CElseEnd,
+        CElseBegin,
+        CFi,
+        CHead,
+        CTail,
+        CExit,
+    )
+}
