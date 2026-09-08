@@ -79,7 +79,6 @@ error: unknown name `y`
 11 |     y += 1;
    |     ^
    |
-note: did you mean `t`?
 
 error: this local is never released: `t`
  --> bad.rev:7:5

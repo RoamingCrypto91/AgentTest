@@ -1223,9 +1223,18 @@ class Analyzer:
 
 
 def _closest(name: str, candidates: Iterable[str]) -> Optional[str]:
-    """A tiny edit-distance suggester for unknown identifiers."""
-    best, best_d = None, 3
-    for c in candidates:
+    """A tiny edit-distance suggester for unknown identifiers.
+
+    The tolerance scales with the length of the name, so short names do not
+    collect confident nonsense -- suggesting `x` for `y` is worse than saying
+    nothing.  Candidates are considered in sorted order so the advice is
+    reproducible.
+    """
+    if len(name) < 3:
+        return None
+    limit = 2 if len(name) < 8 else 3
+    best, best_d = None, limit
+    for c in sorted(candidates):
         d = _edit(name, c)
         if d < best_d:
             best, best_d = c, d
