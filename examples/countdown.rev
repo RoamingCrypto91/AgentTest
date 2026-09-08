@@ -1,0 +1,19 @@
+// A first Reverie program.
+//
+// Run it forwards:   rev run examples/countdown.rev --set n=6
+// Run it backwards:  rev back examples/countdown.rev --set n=6
+
+int n;
+int total;
+
+/// Sum 1..n, keeping enough information to undo the sum.
+proc main() {
+    local int i = 0;
+    from i == 0 do {
+        total += i;
+    } loop {
+        i += 1;
+    } until i == n;
+    delocal int i = n;
+    print "sum 1..", n, " = ", total;
+}

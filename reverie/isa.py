@@ -51,6 +51,8 @@ class Instr:
     name = "?"
     #: instructions that must never be reached in the forward direction
     forward_unreachable = False
+    #: ... and the mirror image
+    backward_unreachable = False
 
     def __init__(self, span: Optional[Span] = None) -> None:
         self.at = -1
@@ -91,14 +93,23 @@ class Nop(Instr):
 
 
 class Halt(Instr):
+    """Program terminator.
+
+    The machine recognises ``halt`` before executing it and simply stops, so it
+    costs no logical time.  That keeps a forward run and its reversal exactly
+    the same length -- otherwise "go back to the beginning" would overshoot by
+    one instruction that has no inverse.
+    """
+
     __slots__ = ()
     name = "halt"
+    backward_unreachable = True
 
-    def forward(self, m) -> None:
+    def forward(self, m) -> None:  # pragma: no cover - the machine stops first
         m.halted = True
 
-    def backward(self, m) -> None:
-        m.halted = True
+    def backward(self, m) -> None:  # pragma: no cover - unreachable
+        raise RuntimeFault("cannot step backwards through `halt`", pc=self.at)
 
 
 # ---------------------------------------------------------------------------
@@ -782,7 +793,7 @@ class Call(Instr):
         self.args = list(args)
         self.uncall = uncall
 
-    def _enter(self, m, ret_pc: int, ret_dir: int, reverse: bool) -> None:
+    def _enter(self, m, reverse: bool) -> None:
         info = m.program.procs.get(self.proc)
         if info is None:
             raise RuntimeFault(f"call to unknown procedure `{self.proc}`", pc=self.at)
@@ -792,19 +803,21 @@ class Call(Instr):
                 pc=self.at,
             )
         params = [a.resolve(m) for a in self.args]
-        m.enter_frame(info, params, ret_pc, ret_dir)
+        m.enter_frame(info, params, self.at, self.uncall)
         if reverse:
-            m.pc = info.exit_at + 1
+            # enter at the far end, walking the body backwards.  `exit_at` is
+            # the boundary just above the last body instruction.
+            m.pc = info.exit_at
             m.dir = -1
         else:
-            m.pc = info.entry_at
+            m.pc = info.entry_at + 1
             m.dir = 1
 
     def forward(self, m) -> None:
-        self._enter(m, self.at + 1, 1, reverse=self.uncall)
+        self._enter(m, reverse=self.uncall)
 
     def backward(self, m) -> None:
-        self._enter(m, self.at, -1, reverse=not self.uncall)
+        self._enter(m, reverse=not self.uncall)
 
     def operands(self) -> str:
         args = ", ".join(a.render() for a in self.args)
@@ -819,36 +832,47 @@ class Call(Instr):
 
 
 class ProcEntry(Instr):
+    """Marker below a procedure body.
+
+    Never executed forwards -- a forward ``call`` jumps past it.  Executed
+    *backwards* when the machine walks out of the bottom of a body, which is
+    what returning looks like when time runs the other way.
+    """
+
     __slots__ = ("proc",)
     name = "entry"
+    forward_unreachable = True
 
     def __init__(self, proc: str, span: Optional[Span] = None) -> None:
         super().__init__(span)
         self.proc = proc
 
-    def forward(self, m) -> None:
-        m.pc += 1
+    def forward(self, m) -> None:  # pragma: no cover - unreachable by construction
+        raise RuntimeFault(f"fell into the entry marker of `{self.proc}`", pc=self.at)
 
     def backward(self, m) -> None:
-        m.leave_frame(self.at)
+        m.leave_frame("entry", self.at)
 
     def operands(self) -> str:
         return self.proc
 
 
 class ProcExit(Instr):
+    """Marker above a procedure body; the mirror image of :class:`ProcEntry`."""
+
     __slots__ = ("proc",)
     name = "exit"
+    backward_unreachable = True
 
     def __init__(self, proc: str, span: Optional[Span] = None) -> None:
         super().__init__(span)
         self.proc = proc
 
     def forward(self, m) -> None:
-        m.leave_frame(self.at)
+        m.leave_frame("exit", self.at)
 
-    def backward(self, m) -> None:
-        m.pc -= 1
+    def backward(self, m) -> None:  # pragma: no cover - unreachable by construction
+        raise RuntimeFault(f"fell into the exit marker of `{self.proc}`", pc=self.at)
 
     def operands(self) -> str:
         return self.proc

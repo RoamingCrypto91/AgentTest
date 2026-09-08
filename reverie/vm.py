@@ -80,11 +80,29 @@ class Program:
 
 @dataclass
 class Frame:
+    """One activation.
+
+    A frame does not record "where to return to" as a single address, because
+    in Reverie you can enter a procedure going forwards and leave it going
+    backwards.  It records the *call site* instead, and which end of the body
+    the caller meant to start from.  Whichever end the machine eventually walks
+    out of, the return is then determined:
+
+    ==================  ==========  ==============================
+    left through        entered by  outcome
+    ==================  ==========  ==============================
+    ``exit`` forwards   ``call``    the call completed  -> after it
+    ``entry`` backwards ``call``    the call was undone -> before it
+    ``entry`` backwards ``uncall``  the uncall completed -> after it
+    ``exit`` forwards   ``uncall``  the uncall was undone -> before it
+    ==================  ==========  ==============================
+    """
+
     proc: ProcInfo
     base: int
     params: list[int]
-    ret_pc: int
-    ret_dir: int
+    call_at: int
+    uncall: bool
     saved_fp: int
     saved_sp: int
 
@@ -159,7 +177,15 @@ class Machine:
         self.fp = 0
         self.sp = program.n_globals
         self.pc = 0
+        #: direction the *next instruction* is executed in.  ``uncall`` flips
+        #: this without reversing time -- a procedure run backwards inside a
+        #: program that is still going forwards.
         self.dir = 1
+        #: the arrow of logical time.  Only ``reverse()`` flips this.
+        self.arrow = 1
+        #: logical position: +1 per forward step, -1 per backward step.  This
+        #: is the coordinate the debugger's `goto` travels along.
+        self.position = 0
         self.halted = False
         self.max_steps = max_steps
         self.trace = trace
@@ -183,7 +209,7 @@ class Machine:
 
     # -- frames -----------------------------------------------------------
     def enter_frame(
-        self, info: ProcInfo, params: list[int], ret_pc: int, ret_dir: int
+        self, info: ProcInfo, params: list[int], call_at: int, uncall: bool
     ) -> None:
         base = self.sp
         need = base + info.frame_size
@@ -194,7 +220,7 @@ class Machine:
                 pc=self.pc,
             )
         self.frames.append(
-            Frame(info, base, params, ret_pc, ret_dir, self.fp, self.sp)
+            Frame(info, base, params, call_at, uncall, self.fp, self.sp)
         )
         self.fp = base
         self.sp = need
@@ -202,7 +228,8 @@ class Machine:
         if len(self.frames) > self.stats.max_depth:
             self.stats.max_depth = len(self.frames)
 
-    def leave_frame(self, at: int) -> None:
+    def leave_frame(self, via: str, at: int) -> None:
+        """Unwind one frame.  *via* is ``"exit"`` or ``"entry"``."""
         if not self.frames:
             raise RuntimeFault("return with no active frame", pc=at)
         frame = self.frames.pop()
@@ -220,8 +247,11 @@ class Machine:
                 )
         self.fp = frame.saved_fp
         self.sp = frame.saved_sp
-        self.pc = frame.ret_pc
-        self.dir = frame.ret_dir
+        completed = (via == "exit") != frame.uncall
+        if completed:
+            self.pc, self.dir = frame.call_at + 1, 1
+        else:
+            self.pc, self.dir = frame.call_at, -1
 
     # -- execution --------------------------------------------------------
     def current(self) -> Optional[Instr]:
@@ -232,7 +262,13 @@ class Machine:
         return None
 
     def step(self) -> bool:
-        """Execute one instruction.  Returns False once the machine stops."""
+        """Execute one instruction.
+
+        Returns True if an instruction actually ran.  A False result means the
+        machine has nothing left to do in the current direction -- it reached
+        ``halt`` going forwards, or the very beginning of the program going
+        backwards.
+        """
         if self.halted:
             return False
         code = self.program.code
@@ -241,6 +277,12 @@ class Machine:
                 self.halted = True
                 return False
             ins = code[self.pc]
+            if type(ins) is Halt:
+                # `halt` is a terminator, not a reversible instruction.  Not
+                # counting it keeps logical time symmetric: a complete forward
+                # run and its complete reversal have the same length.
+                self.halted = True
+                return False
         else:
             if self.pc <= 0:
                 self.halted = True
@@ -255,6 +297,7 @@ class Machine:
             ins.backward(self)
             self.stats.backward_steps += 1
         self.stats.steps += 1
+        self.position += self.arrow
         if self.stats.steps > self.max_steps:
             raise RuntimeFault(
                 f"step limit exceeded ({self.max_steps}); the program may not terminate",
@@ -262,7 +305,7 @@ class Machine:
             )
         if self.dir < 0 and self.pc <= 0:
             self.halted = True
-        return not self.halted
+        return True
 
     def run(self, limit: Optional[int] = None) -> "Machine":
         n = 0
@@ -273,8 +316,14 @@ class Machine:
         return self
 
     def reverse(self) -> "Machine":
-        """Flip the direction of time.  Free, because ``pc`` is a boundary."""
+        """Flip the direction of time.  Free, because ``pc`` is a boundary.
+
+        There is no bookkeeping to do and no history to rewind: ``pc`` names a
+        point *between* instructions, so the same value is valid in either
+        direction.  Flipping two signs is the whole operation.
+        """
         self.dir = -self.dir
+        self.arrow = -self.arrow
         self.halted = False
         return self
 
@@ -282,6 +331,7 @@ class Machine:
     def start_forward(self) -> "Machine":
         self.pc = 0
         self.dir = 1
+        self.arrow = 1
         self.halted = False
         return self
 
@@ -289,6 +339,7 @@ class Machine:
         """Position the machine to undo a completed forward run."""
         self.pc = self._halt_boundary()
         self.dir = -1
+        self.arrow = -1
         self.halted = False
         return self
 
@@ -325,6 +376,8 @@ class Machine:
         return {
             "pc": self.pc,
             "dir": self.dir,
+            "arrow": self.arrow,
+            "position": self.position,
             "fp": self.fp,
             "sp": self.sp,
             "halted": self.halted,
@@ -338,6 +391,8 @@ class Machine:
     def restore(self, snap: dict) -> "Machine":
         self.pc = snap["pc"]
         self.dir = snap["dir"]
+        self.arrow = snap.get("arrow", 1)
+        self.position = snap.get("position", 0)
         self.fp = snap["fp"]
         self.sp = snap["sp"]
         self.halted = snap["halted"]

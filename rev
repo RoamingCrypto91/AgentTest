@@ -1,0 +1,3 @@
+#!/bin/sh
+# Reverie command line -- run programs, invert them, travel through their execution.
+exec python3 -c 'import os,sys; sys.path.insert(0, os.path.dirname(os.path.realpath("'"$0"'"))); from reverie.cli import main; sys.exit(main())' "$@"
