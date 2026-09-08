@@ -306,9 +306,9 @@ class Compiler:
             info = self.a.procs[decl.name]
             self.ctemp_as_param = False
             body = self.stmt(decl.body)
-            entry_at = b.emit(ProcEntry(decl.name))
+            entry_at = b.emit(ProcEntry(decl.name, decl.span))
             body.lower(b)
-            exit_at = b.emit(ProcExit(decl.name))
+            exit_at = b.emit(ProcExit(decl.name, decl.span))
             prog.procs[decl.name] = ProcInfo(
                 decl.name,
                 entry_at,
@@ -327,9 +327,10 @@ class Compiler:
         self.next_counter = 0
         body = self.cstmt(plan.body)
         frame_size = self.next_counter
-        entry_at = b.emit(ProcEntry(plan.proc_name))
+        span = plan.node.span
+        entry_at = b.emit(ProcEntry(plan.proc_name, span))
         body.lower(b)
-        exit_at = b.emit(ProcExit(plan.proc_name))
+        exit_at = b.emit(ProcExit(plan.proc_name, span))
         params = plan.params
         prog.procs[plan.proc_name] = ProcInfo(
             plan.proc_name,

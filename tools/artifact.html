@@ -1,0 +1,813 @@
+<title>Reverie</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap">
+<style>
+:root {
+  --paper:   #eef1f2;
+  --panel:   #ffffff;
+  --ink:     #14181c;
+  --muted:   #59636d;
+  --rule:    #d8dde0;
+  --fwd:     #a94c07;
+  --rev:     #33469a;
+  --fwd-wash:#f7e9dc;
+  --rev-wash:#e4e8f7;
+  --screen:      #0b0e13;
+  --screen-panel:#12161d;
+  --screen-ink:  #dfe3e8;
+  --screen-dim:  #7e8895;
+  --screen-rule: #232a34;
+  --screen-fwd:  #f0913f;
+  --screen-rev:  #93a6ea;
+  --display: "Instrument Serif", Georgia, "Times New Roman", serif;
+  --body: Archivo, "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --shell: 1160px;
+  --col: 34rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:   #0d1014;
+    --panel:   #141a20;
+    --ink:     #e3e7ea;
+    --muted:   #8b949e;
+    --rule:    #232a31;
+    --fwd:     #f0913f;
+    --rev:     #93a6ea;
+    --fwd-wash:#2e2013;
+    --rev-wash:#1b2033;
+  }
+}
+:root[data-theme="dark"] {
+  --paper:   #0d1014;
+  --panel:   #141a20;
+  --ink:     #e3e7ea;
+  --muted:   #8b949e;
+  --rule:    #232a31;
+  --fwd:     #f0913f;
+  --rev:     #93a6ea;
+  --fwd-wash:#2e2013;
+  --rev-wash:#1b2033;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 16px/1.62 var(--body);
+  -webkit-font-smoothing: antialiased;
+}
+.shell { max-width: var(--shell); margin: 0 auto; padding: 0 24px; }
+.col { max-width: var(--col); }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+p { margin: 0; }
+a { color: inherit; text-decoration-color: var(--fwd); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, .tab:focus-visible {
+  outline: 2px solid var(--fwd); outline-offset: 2px; border-radius: 3px;
+}
+code, pre, .mono { font-family: var(--mono); font-size: 13px; }
+
+/* ---------- masthead ---------------------------------------------------- */
+.masthead { padding: 56px 0 34px; }
+.eyebrow {
+  font: 500 11px/1 var(--mono); letter-spacing: .18em; text-transform: uppercase;
+  color: var(--muted);
+}
+h1 {
+  font-family: var(--display); font-weight: 400;
+  font-size: clamp(3.4rem, 11vw, 6.5rem); line-height: .92;
+  letter-spacing: -.015em; margin: 18px 0 0;
+}
+h1 em { font-style: italic; color: var(--fwd); }
+.thesis {
+  font-size: clamp(1.12rem, 2.2vw, 1.45rem); line-height: 1.45; max-width: 30rem;
+  margin-top: 20px; color: var(--ink);
+}
+.thesis b { font-weight: 600; }
+.axis {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center;
+  gap: 14px; margin-top: 34px; font: 500 11px/1 var(--mono);
+  letter-spacing: .16em; text-transform: uppercase;
+}
+.axis .rail { height: 1px; background:
+  linear-gradient(90deg, var(--rev), var(--rule) 45%, var(--rule) 55%, var(--fwd)); }
+.axis .l { color: var(--rev); }
+.axis .r { color: var(--fwd); }
+
+/* ---------- instrument -------------------------------------------------- */
+.instrument {
+  background: var(--screen); color: var(--screen-ink);
+  border-radius: 10px; overflow: hidden;
+  box-shadow: 0 1px 0 rgba(255,255,255,.04) inset, 0 18px 40px -28px rgba(0,0,0,.7);
+}
+.plate {
+  display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: baseline;
+  padding: 14px 18px; border-bottom: 1px solid var(--screen-rule);
+  font: 500 11px/1.4 var(--mono); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--screen-dim);
+}
+.plate .cmd { text-transform: none; letter-spacing: 0; color: var(--screen-fwd); }
+.tabs { display: flex; gap: 6px; padding: 12px 18px 0; flex-wrap: wrap; }
+.tab {
+  font: 500 12px/1 var(--mono); padding: 7px 12px; border-radius: 999px;
+  border: 1px solid var(--screen-rule); background: transparent;
+  color: var(--screen-dim); cursor: pointer; letter-spacing: .02em;
+}
+.tab:hover { color: var(--screen-ink); border-color: var(--screen-dim); }
+.tab[aria-selected="true"] {
+  color: var(--screen); background: var(--screen-fwd); border-color: var(--screen-fwd);
+}
+.blurb {
+  padding: 14px 18px 0; color: var(--screen-dim); font-size: 14px;
+  max-width: 62ch; line-height: 1.55;
+}
+.blurb code { color: var(--screen-ink); font-size: 12.5px; }
+.panes {
+  display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 1px; background: var(--screen-rule); margin: 16px 0 0;
+  border-top: 1px solid var(--screen-rule);
+}
+@media (max-width: 860px) { .panes { grid-template-columns: 1fr; } }
+.pane { background: var(--screen); padding: 14px 18px 18px; min-width: 0; }
+.pane h3 {
+  font: 500 10px/1 var(--mono); letter-spacing: .18em; text-transform: uppercase;
+  color: var(--screen-dim); margin-bottom: 10px;
+}
+.pane > h3 ~ h3 { margin-top: 24px; }
+.pane > .gauge + h3 { margin-top: 26px; }
+.srcbox { max-height: 320px; overflow: auto; }
+.srcline { display: grid; grid-template-columns: 2.6em 1fr; font-family: var(--mono);
+           font-size: 12.5px; line-height: 1.5; }
+.srcline .n { color: #4d5663; text-align: right; padding-right: 12px; user-select: none; }
+.srcline pre { margin: 0; white-space: pre; color: #b9c1cc; }
+.srcline.on { background: #1b2028; }
+.srcline.on .n { color: var(--screen-fwd); }
+.srcline.on pre { color: var(--screen-ink); }
+.srcline.on.rev { background: #191d2c; }
+.srcline.on.rev .n { color: var(--screen-rev); }
+
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px;
+      font-family: var(--mono); font-size: 12.5px; align-items: start;
+      margin: 0; }
+.kv dt { color: var(--screen-dim); }
+.kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+.cells { display: flex; flex-wrap: wrap; gap: 3px; }
+.cell {
+  min-width: 2.3em; padding: 1px 5px; text-align: right; border-radius: 3px;
+  background: #1a1f27; font-variant-numeric: tabular-nums; font-size: 12px;
+  transition: background .12s linear, color .12s linear;
+}
+.cell.hit { background: var(--screen-fwd); color: var(--screen); font-weight: 600; }
+.cell.zero { color: #4d5663; }
+.gauge { margin-top: 4px; }
+.gauge svg { display: block; width: 100%; height: 74px; }
+.gauge .legend { display: flex; gap: 16px; font: 500 10px/1 var(--mono);
+                 letter-spacing: .12em; text-transform: uppercase; margin-top: 8px; }
+.gauge .legend i { display: inline-block; width: 9px; height: 2px; margin-right: 6px;
+                   vertical-align: middle; }
+.termout {
+  background: #080a0e; border-radius: 5px; padding: 10px 12px; min-height: 5.4em;
+  font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap;
+  color: #b9c1cc; word-break: break-word; max-height: 150px; overflow: auto;
+}
+.termout .caret { border-left: 2px solid var(--screen-fwd); margin-left: 1px; }
+
+.transport {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 14px 18px 18px; border-top: 1px solid var(--screen-rule);
+}
+.transport button {
+  font: 500 12px/1 var(--mono); padding: 8px 12px; border-radius: 5px;
+  border: 1px solid var(--screen-rule); background: var(--screen-panel);
+  color: var(--screen-ink); cursor: pointer;
+}
+.transport button:hover { border-color: var(--screen-fwd); color: var(--screen-fwd); }
+.transport button.go {
+  background: var(--screen-fwd); color: var(--screen); border-color: var(--screen-fwd);
+  min-width: 5.6em;
+}
+.transport button.go:hover { color: var(--screen); filter: brightness(1.07); }
+.transport input[type=range] { flex: 1 1 220px; min-width: 140px; accent-color: var(--screen-fwd); }
+.clock { font: 500 12px/1 var(--mono); color: var(--screen-dim); white-space: nowrap;
+         font-variant-numeric: tabular-nums; }
+.clock b { color: var(--screen-ink); }
+.clock .dir { display: inline-block; width: 1.3em; }
+.clock .dir.f { color: var(--screen-fwd); }
+.clock .dir.b { color: var(--screen-rev); }
+
+/* ---------- prose ------------------------------------------------------- */
+main { padding: 72px 0 0; }
+section { padding-bottom: 64px; }
+.lede { font-size: 1.22rem; line-height: 1.55; max-width: 32rem; }
+.stack { display: flex; flex-direction: column; gap: 18px; }
+h2 {
+  font-family: var(--display); font-weight: 400; font-size: 2.1rem; line-height: 1.1;
+  letter-spacing: -.01em;
+}
+h2 .num {
+  font: 500 11px/1 var(--mono); letter-spacing: .18em; color: var(--fwd);
+  display: block; margin-bottom: 10px; text-transform: uppercase;
+}
+.split { display: grid; grid-template-columns: minmax(0, 27rem) minmax(0, 1fr);
+         gap: 34px; align-items: start; }
+@media (max-width: 900px) { .split { grid-template-columns: 1fr; gap: 22px; } }
+figure { margin: 0; }
+figcaption {
+  font: 500 10.5px/1.5 var(--mono); letter-spacing: .13em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 8px;
+}
+pre.code {
+  margin: 0; background: var(--panel); border: 1px solid var(--rule);
+  border-radius: 8px; padding: 14px 16px; overflow-x: auto; line-height: 1.55;
+  color: var(--ink);
+}
+pre.term {
+  margin: 0; background: var(--screen); color: #b9c1cc; border-radius: 8px;
+  padding: 14px 16px; overflow-x: auto; line-height: 1.55; font-size: 12.5px;
+  font-family: var(--mono);
+}
+pre.term .sh { color: var(--screen-fwd); }
+pre.term .em { color: var(--screen-ink); font-weight: 600; }
+.diag { background: var(--screen); border-radius: 8px; padding: 14px 16px;
+        font-family: var(--mono); font-size: 12.5px; line-height: 1.55;
+        overflow-x: auto; color: #b9c1cc; white-space: pre; }
+.diag .err { color: #ff7b72; font-weight: 600; }
+.diag .car { color: #ff7b72; }
+.diag .note { color: var(--screen-rev); }
+.flip { display: flex; gap: 8px; margin-bottom: 10px; }
+.flip button {
+  font: 500 11px/1 var(--mono); letter-spacing: .06em; padding: 7px 12px;
+  border-radius: 999px; border: 1px solid var(--rule); background: var(--panel);
+  color: var(--muted); cursor: pointer;
+}
+.flip button[aria-pressed="true"] {
+  border-color: var(--fwd); color: var(--fwd); background: var(--fwd-wash);
+}
+.rules { display: grid; gap: 1px; background: var(--rule); border: 1px solid var(--rule);
+         border-radius: 8px; overflow: hidden; }
+.rule-row { background: var(--panel); padding: 14px 16px; display: grid;
+            grid-template-columns: 1.6rem 1fr; gap: 14px; align-items: baseline; }
+.rule-row .k { font: 500 12px/1.4 var(--mono); color: var(--fwd); }
+.rule-row .t { font-size: 14.5px; line-height: 1.55; }
+.rule-row .t b { font-weight: 600; }
+.ledger { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          gap: 1px; background: var(--rule); border: 1px solid var(--rule);
+          border-radius: 8px; overflow: hidden; }
+.ledger div { background: var(--panel); padding: 14px 16px; }
+.ledger dt { font: 500 10.5px/1.4 var(--mono); letter-spacing: .13em;
+             text-transform: uppercase; color: var(--muted); }
+.ledger dd { margin: 6px 0 0; font-family: var(--mono); font-size: 1.45rem;
+             font-variant-numeric: tabular-nums; }
+.ledger dd.zero { color: var(--fwd); }
+.callout {
+  border-left: 2px solid var(--fwd); padding: 2px 0 2px 18px;
+  font-size: 15px; line-height: 1.6; color: var(--ink);
+}
+.bugs { display: grid; gap: 14px; }
+.bug { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: baseline; }
+.bug .tag { font: 500 10.5px/1.4 var(--mono); letter-spacing: .1em;
+            text-transform: uppercase; color: var(--rev); white-space: nowrap;
+            padding-top: 3px; }
+.bug p { font-size: 14.5px; line-height: 1.6; }
+footer {
+  border-top: 1px solid var(--rule); margin-top: 20px; padding: 40px 0 72px;
+  color: var(--muted); font-size: 14px;
+}
+footer .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+               gap: 28px; }
+footer h3 { font: 500 10.5px/1 var(--mono); letter-spacing: .15em;
+            text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+footer ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; }
+footer .file { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
+.ledger dd { white-space: nowrap; }
+.muted { color: var(--muted); }
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+</style>
+
+<div class="shell masthead">
+  <p class="eyebrow">a programming language · 12,000 lines · no dependencies</p>
+  <h1>Reverie</h1>
+  <p class="thesis">
+    Every program here runs <em>backwards</em>. Not replayed from a log —
+    <b>there is no log.</b> Each instruction has an exact inverse, and running
+    a program in reverse is those inverses in the opposite order.
+  </p>
+  <div class="axis">
+    <span class="l">← uncompute</span><span class="rail"></span><span class="r">compute →</span>
+  </div>
+</div>
+
+<div class="shell">
+  <div class="instrument" id="lab">
+    <div class="plate">
+      <span>plate 1 — execution, scrubbable</span>
+      <span class="cmd" id="cmd"></span>
+    </div>
+    <div class="tabs" id="tabs" role="tablist"></div>
+    <p class="blurb" id="blurb"></p>
+    <div class="panes">
+      <div class="pane">
+        <h3>source</h3>
+        <div class="srcbox" id="src"></div>
+      </div>
+      <div class="pane">
+        <h3>state</h3>
+        <dl class="kv" id="state"></dl>
+        <h3>history tape &amp; stack depth</h3>
+        <div class="gauge">
+          <svg id="gauge" viewBox="0 0 600 74" preserveAspectRatio="none"
+               role="img" aria-label="depth of the history tape over the run"></svg>
+          <div class="legend">
+            <span style="color:var(--screen-fwd)"><i style="background:var(--screen-fwd)"></i>tape</span>
+            <span style="color:var(--screen-rev)"><i style="background:var(--screen-rev)"></i>stack</span>
+            <span style="color:var(--screen-dim)" id="gauge-note"></span>
+          </div>
+        </div>
+        <h3>output</h3>
+        <div class="termout" id="out"></div>
+      </div>
+    </div>
+    <div class="transport">
+      <button id="home" title="beginning">|◀</button>
+      <button id="back">◀ step</button>
+      <button class="go" id="play">play</button>
+      <button id="fwd">step ▶</button>
+      <button id="end" title="end">▶|</button>
+      <input type="range" id="scrub" min="0" value="0" aria-label="position in the execution">
+      <span class="clock"><span class="dir f" id="dir">→</span> t = <b id="t">0</b> / <span id="tmax">0</span></span>
+    </div>
+  </div>
+</div>
+
+<main class="shell">
+
+<section class="stack">
+  <p class="lede">
+    A conventional processor erases constantly: every <code>x = y</code> throws
+    away whatever <code>x</code> held. Landauer’s principle says that costs
+    energy — <i>kT</i>&#8202;ln&#8202;2 per bit, and it is the only floor
+    computation has. Bennett showed the floor is avoidable.
+  </p>
+  <p class="col">
+    Reverie is what that looks like as a language you can actually run. It has
+    no assignment. Its conditionals carry two predicates. Its debugger travels
+    backwards through a program without recording anything, because the machine
+    can simply run the other way.
+  </p>
+</section>
+
+<section class="split">
+  <div class="stack">
+    <h2><span class="num">idea 01</span>A conditional carries two predicates</h2>
+    <p>
+      The test at the top chooses the branch on the way in. The predicate after
+      <code>fi</code> must be <b>true</b> when the then-branch finishes and
+      <b>false</b> when the else-branch does.
+    </p>
+    <p>
+      That is exactly what a reader of the <i>reverse</i> execution needs in
+      order to know which way control went — so the machine needs no branch
+      history at all. Here <code>swapped</code> is the witness: one, if the
+      swap happened. Loops carry the same pair — <code>from</code> is an entry
+      assertion, <code>until</code> the exit test.
+    </p>
+  </div>
+  <figure>
+    <figcaption>stdlib/sort.rev — one compare-and-swap</figcaption>
+    <pre class="code" id="cond-code"></pre>
+  </figure>
+</section>
+
+<section class="split">
+  <div class="stack">
+    <h2><span class="num">idea 02</span>An update may not read what it writes</h2>
+    <p>
+      <code>x += f(y)</code> is undone by <code>x -= f(y)</code>, which is only
+      correct if <code>f(y)</code> evaluates identically before and after. So
+      the compiler refuses the alternative, and says why.
+    </p>
+    <p class="muted">
+      Four rules like this one — checked statically, before anything runs — are
+      enough to guarantee a whole program is injective.
+    </p>
+    <div class="rules" id="rules"></div>
+  </div>
+  <figure>
+    <figcaption>$ rev check bad.rev</figcaption>
+    <div class="diag" id="diag"></div>
+  </figure>
+</section>
+
+<section class="split">
+  <div class="stack">
+    <h2><span class="num">idea 03</span>Inversion is an operation, not a feature</h2>
+    <p>
+      A sequence inverts by reversing it. A conditional swaps its two
+      predicates. A loop swaps its entry assertion with its exit test.
+      <code>call</code> and <code>uncall</code> swap; so do
+      <code>local</code> and <code>delocal</code>.
+    </p>
+    <p>
+      Even <code>print</code> has an inverse. Output is information, so an
+      inverted program does not print again — it <b>un-prints</b>, consuming
+      the log the forward program produced.
+    </p>
+    <p class="callout">
+      The same transformation is available inside the language as
+      <code>undo { … }</code>, and the compiler implements it by calling
+      <code>.invert()</code> on the IR it has just built.
+    </p>
+  </div>
+  <figure>
+    <div class="flip" role="group" aria-label="direction">
+      <button id="flip-f" aria-pressed="true">forward</button>
+      <button id="flip-b" aria-pressed="false">$ rev invert</button>
+    </div>
+    <pre class="code" id="inv-code"></pre>
+  </figure>
+</section>
+
+<section class="split">
+  <div class="stack">
+    <h2><span class="num">idea 04</span>Destructive code, without the erasure</h2>
+    <p>
+      Inside an <code>embed</code> block you write what you would write
+      anywhere: <code>=</code> assigns, <code>while</code> loops, temporaries
+      get overwritten. The compiler pays for it with a history tape — and then
+      hands the tape back.
+    </p>
+    <p>
+      Compute, copy the answer out, uncompute. Everything the classical code
+      scribbled is put back exactly where it was found. Drag plate 1 to
+      <i>square root</i> and watch the tape climb, hold, and drain.
+    </p>
+  </div>
+  <figure>
+    <figcaption>$ rev doctor examples/embedding.rev --set n=1234567</figcaption>
+    <pre class="term" id="doctor"></pre>
+    <dl class="ledger" id="ledger" style="margin-top:14px"></dl>
+  </figure>
+</section>
+
+<section class="split">
+  <div class="stack">
+    <h2><span class="num">idea 05</span>An inverse nobody wrote</h2>
+    <p>
+      <code>fib</code> maps an index to a Fibonacci pair, consuming the index
+      to zero as it goes. Nothing in it is special-cased for inversion.
+    </p>
+    <p>
+      But every statement in it has an inverse, so <code>uncall fib</code> is a
+      program that takes a Fibonacci pair and tells you its index. That program
+      does not appear in the source. The compiler derived it.
+    </p>
+  </div>
+  <figure>
+    <figcaption>$ rev run examples/fibonacci.rev --set n=10</figcaption>
+    <pre class="term" id="fib"></pre>
+  </figure>
+</section>
+
+<section class="stack">
+  <h2><span class="num">how it is tested</span>Reversibility is its own oracle</h2>
+  <div class="split">
+    <div class="stack">
+      <p>
+        A reversible language admits a specification that needs no expected
+        outputs: <b>forward then backward is the identity on machine state</b> —
+        every cell, every stack, every line of output, every entry of the tape.
+      </p>
+      <p>
+        So the test suite generates programs nobody wrote — valid by
+        construction — and checks that identity, that <code>rev invert</code>
+        really produces the inverse, that the two independent inverters agree,
+        and that the debugger’s <code>goto</code> lands exactly where stepping
+        would.
+      </p>
+      <p class="callout">
+        The property that mattered was per-step, not end-to-end: from every
+        reachable point, step back and forward again and demand bit-for-bit
+        equality of state <i>and</i> program counter. Round-tripping a whole
+        program only shows the composition is the identity. Errors that cancel
+        survive it. Three did.
+      </p>
+    </div>
+    <div class="stack">
+      <div class="bugs">
+        <div class="bug">
+          <span class="tag">off by one</span>
+          <p>Conditionals took one extra instruction backwards. Harmless at the
+             ends of a run; fatal if you reverse in the middle of a branch.</p>
+        </div>
+        <div class="bug">
+          <span class="tag">split pair</span>
+          <p>A classical <code>while</code> counted iterations in one
+             instruction and uncounted them in another, so the loop balanced
+             overall while individual transitions were not inverses.</p>
+        </div>
+        <div class="bug">
+          <span class="tag">buried bit</span>
+          <p>The classical branch bit was written <i>before</i> the branch ran,
+             so at the join it sat underneath everything the branch had
+             recorded. Reversing popped a value the body owned and used it to
+             choose a branch. It cancelled often enough to pass some six
+             hundred round-trip tests.</p>
+        </div>
+      </div>
+      <p class="muted" style="font-size:14px">
+        All three are the same failure of imagination: treating “the whole
+        thing reverses” as if it meant “each step reverses”. In a machine that
+        supports stopping and turning around, it does not.
+      </p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="grid">
+    <div>
+      <h3>the pieces</h3>
+      <ul>
+        <li><span class="file">isa.py · vm.py</span><br><span class="muted">30 instructions, each with a defined inverse; the bidirectional machine</span></li>
+        <li><span class="file">checker.py</span><br><span class="muted">the static proof that a program is injective</span></li>
+        <li><span class="file">rir.py · compiler.py</span><br><span class="muted">lowering, and inversion as an IR operation</span></li>
+        <li><span class="file">debugger.py · viz.py</span><br><span class="muted">travelling through an execution</span></li>
+      </ul>
+    </div>
+    <div>
+      <h3>eleven examples</h3>
+      <ul class="muted">
+        <li><span class="file">fibonacci</span> — uncall inverts a function</li>
+        <li><span class="file">rle</span> — the encoder backwards is the decoder</li>
+        <li><span class="file">sorting</span> — the permutation, written down</li>
+        <li><span class="file">critters</span> — a cellular automaton that un-evolves</li>
+        <li><span class="file">cipher</span> — decryption is <code>uncall</code></li>
+        <li><span class="file">hanoi</span> — reversible recursion over three stacks</li>
+      </ul>
+    </div>
+    <div>
+      <h3>prior art</h3>
+      <p class="muted">
+        The surface language owes its shape to <b>Janus</b> (Lutz &amp; Derby,
+        1986). <code>embed</code> is <b>Bennett’s</b> compute–copy–uncompute
+        (1973, 1989). The thermodynamic framing is <b>Landauer’s</b> (1961).
+      </p>
+      <p class="muted" style="margin-top:12px">
+        New here: a bytecode machine whose program counter is a boundary index,
+        so reversing time costs two sign flips; frames that survive being
+        entered forwards and left backwards; and a test methodology that turns
+        the language’s defining property into the oracle.
+      </p>
+    </div>
+  </div>
+</footer>
+</main>
+
+<script id="payload" type="application/json">__DATA__</script>
+<script>
+"use strict";
+const D = JSON.parse(document.getElementById("payload").textContent);
+const esc = s => s.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+/* ---------- static prose bits ------------------------------------------- */
+document.getElementById("cond-code").textContent = D.conditional;
+document.getElementById("fib").textContent = D.fibonacci;
+document.getElementById("doctor").textContent = D.doctor;
+
+const RULES = [
+  ["01", "<b>No self-reference in an update.</b> The right-hand side must not read the target."],
+  ["02", "<b>Balanced locals.</b> Every <code>local</code> is closed by a <code>delocal</code> that reconstructs its value."],
+  ["03", "<b>No aliasing across arguments.</b> Two references to one cell would defeat rule 01 invisibly."],
+  ["04", "<b>Classical code stays in its box.</b> Inside <code>embed</code> you may only assign to what the block declared."],
+];
+document.getElementById("rules").innerHTML = RULES.map(([k, t]) =>
+  `<div class="rule-row"><span class="k">${k}</span><span class="t">${t}</span></div>`).join("");
+
+document.getElementById("diag").innerHTML = D.diagnostic.message.split("\n").map(l => {
+  if (l.startsWith("error:")) return `<span class="err">${esc(l)}</span>`;
+  if (l.startsWith("note:")) return `<span class="note">${esc(l)}</span>`;
+  if (/\^/.test(l)) return `<span class="car">${esc(l)}</span>`;
+  return esc(l);
+}).join("\n");
+
+const LEDGER = [
+  ["tape peak, entries", "1,115"],
+  ["bits written", "25,818"],
+  ["entries reclaimed", "3,038"],
+  ["bits erased", "0", true],
+];
+document.getElementById("ledger").innerHTML = LEDGER.map(([k, v, z]) =>
+  `<div><dt>${k}</dt><dd class="${z ? "zero" : ""}">${v}</dd></div>`).join("");
+
+/* ---------- the source flip --------------------------------------------- */
+const invEl = document.getElementById("inv-code");
+const fF = document.getElementById("flip-f"), fB = document.getElementById("flip-b");
+function setFlip(forward) {
+  invEl.textContent = forward ? D.inversion.forward : D.inversion.inverse;
+  fF.setAttribute("aria-pressed", String(forward));
+  fB.setAttribute("aria-pressed", String(!forward));
+}
+fF.onclick = () => setFlip(true);
+fB.onclick = () => setFlip(false);
+setFlip(true);
+
+/* ---------- plate 1: the scrubber --------------------------------------- */
+const tabsEl = document.getElementById("tabs");
+const srcEl = document.getElementById("src");
+const stateEl = document.getElementById("state");
+const outEl = document.getElementById("out");
+const gaugeEl = document.getElementById("gauge");
+const scrub = document.getElementById("scrub");
+
+let demo, T, N, mem, stacks, lines, line, t, lastLine = -1, timer = null;
+
+tabsEl.innerHTML = D.demos.map((d, i) =>
+  `<button class="tab" role="tab" data-i="${i}" aria-selected="${i === 0}">${d.label}</button>`
+).join("");
+tabsEl.querySelectorAll(".tab").forEach(b => b.onclick = () => select(+b.dataset.i));
+
+function select(i) {
+  stop();
+  tabsEl.querySelectorAll(".tab").forEach(b =>
+    b.setAttribute("aria-selected", String(+b.dataset.i === i)));
+  demo = D.demos[i];
+  T = demo.trace;
+  N = T.frames.length;
+  document.getElementById("blurb").innerHTML = demo.blurb.replace(
+    /`([^`]+)`/g, (_, c) => `<code>${esc(c)}</code>`);
+  const sets = Object.entries(T.initial || {})
+    .map(([k, v]) => ` --set ${k}=${Array.isArray(v) ? v.join(",") : v}`).join("");
+  document.getElementById("cmd").textContent = `$ rev viz ${demo.path}${sets}`;
+  // Some instructions -- the bootstrap `call main` and `halt` -- have no
+  // source position.  Carry the last known one forward so the highlight
+  // holds steady instead of blinking out.
+  let lastL = 0, lastF = T.name;
+  for (const f of T.frames) {
+    if (f.l) { lastL = f.l; lastF = f.f; } else { f.l = lastL; f.f = lastF; }
+  }
+  const text = T.sources[T.name] || T.source || "";
+  srcEl.innerHTML = text.split("\n").map((l, k) =>
+    `<div class="srcline" data-line="${k + 1}"><span class="n">${k + 1}</span>` +
+    `<pre>${esc(l) || " "}</pre></div>`).join("");
+  scrub.max = N;
+  document.getElementById("tmax").textContent = N;
+  reset();
+  drawGauge();
+  goTo(restingPoint());
+}
+
+function reset() {
+  mem = T.start_mem.slice();
+  stacks = Array.from({length: T.n_stacks}, () => []);
+  lines = []; line = ""; t = 0; lastLine = -1;
+}
+
+function apply(f, dir) {
+  if (f.c) for (const k in f.c) mem[+k] = dir > 0 ? f.c[k][1] : f.c[k][0];
+  if (f.k) {
+    const [idx, op, val] = f.k;
+    if ((op === "push") === (dir > 0)) stacks[idx].push(val); else stacks[idx].pop();
+  }
+  if (f.e) {
+    const [text, ends, undo] = f.e;
+    if ((dir > 0) !== !!undo) {
+      if (ends) { lines.push(line + text); line = ""; } else line += text;
+    } else if (ends) {
+      const last = lines.pop() || "";
+      line = last.slice(0, last.length - text.length);
+    } else line = line.slice(0, line.length - text.length);
+  }
+}
+
+function goTo(target) {
+  target = Math.max(0, Math.min(N, target));
+  while (t < target) apply(T.frames[t++], 1);
+  while (t > target) apply(T.frames[--t], -1);
+  paint();
+}
+
+/** Open on the busiest moment, so the page shows work at rest. */
+function restingPoint() {
+  let best = 0, bestScore = -1;
+  T.frames.forEach((f, i) => {
+    const score = (f.tape || 0) * 3 + (f.depth || 0) + (f.l ? 1 : 0);
+    if (score > bestScore) { bestScore = score; best = i; }
+  });
+  return bestScore > 0 ? best : Math.floor(N * 0.55);
+}
+
+function stackDepths() {
+  let d = 0;
+  return T.frames.map(f => {
+    if (f.k) d += f.k[1] === "push" ? 1 : -1;
+    return d;
+  });
+}
+
+function drawGauge() {
+  const w = 600, h = 74, pad = 6;
+  const tape = T.frames.map(f => f.tape || 0);
+  const stk = stackDepths();
+  const top = Math.max(1, ...tape, ...stk);
+  const path = arr => arr.map((v, i) => {
+    const x = (i / Math.max(1, N - 1)) * w;
+    const y = h - pad - (v / top) * (h - pad * 2);
+    return `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join("");
+  const area = arr => path(arr) + `L${w},${h - pad}L0,${h - pad}Z`;
+  const used = Math.max(...tape) > 0, hasStack = Math.max(...stk) > 0;
+  gaugeEl.innerHTML =
+    `<line x1="0" y1="${h - pad}" x2="${w}" y2="${h - pad}" stroke="var(--screen-rule)" stroke-width="1"/>` +
+    (used ? `<path d="${area(tape)}" fill="var(--screen-fwd)" fill-opacity=".16"/>
+             <path d="${path(tape)}" fill="none" stroke="var(--screen-fwd)" stroke-width="1.6"/>` : "") +
+    (hasStack ? `<path d="${path(stk)}" fill="none" stroke="var(--screen-rev)" stroke-width="1.4"/>` : "") +
+    `<line id="head" x1="0" y1="0" x2="0" y2="${h}" stroke="var(--screen-ink)" stroke-width="1" opacity=".55"/>` +
+    `<text x="${w - 5}" y="13" text-anchor="end" fill="var(--screen-dim)" font-family="var(--mono)" font-size="10">peak ${top}</text>`;
+  document.getElementById("gauge-note").textContent =
+    used ? `${T.stats.tape_pushes} written · ${T.stats.tape_pops} reclaimed · 0 erased`
+         : "this program never needs the tape";
+}
+
+function paint() {
+  const f = t < N ? T.frames[t] : null;
+  const prev = t > 0 ? T.frames[t - 1] : null;
+  const cur = f || prev || {};
+  const changed = new Set();
+  if (prev && prev.c) for (const k in prev.c) changed.add(+k);
+
+  srcEl.querySelectorAll(".srcline.on").forEach(e => e.classList.remove("on", "rev"));
+  const inFile = !cur.f || cur.f === T.name;
+  const el = inFile ? srcEl.querySelector(`[data-line="${cur.l}"]`) : null;
+  if (el) {
+    el.classList.add("on");
+    if (cur.d < 0) el.classList.add("rev");
+    if (cur.l !== lastLine) el.scrollIntoView({block: "nearest"});
+    lastLine = cur.l;
+  }
+
+  let rows = "";
+  for (const g of T.globals) {
+    if (g.kind === "stack") {
+      const s = stacks[mem[g.addr] - 1] || [];
+      rows += `<dt>${g.name}</dt><dd><div class="cells">` +
+        (s.length ? s.map(v => `<span class="cell">${v}</span>`).join("")
+                  : `<span class="cell zero">—</span>`) + `</div></dd>`;
+    } else if (g.kind === "array") {
+      rows += `<dt>${g.name}</dt><dd><div class="cells">` +
+        Array.from({length: g.size}, (_, i) => {
+          const v = mem[g.addr + i];
+          return `<span class="cell${changed.has(g.addr + i) ? " hit" : v ? "" : " zero"}">${v}</span>`;
+        }).join("") + `</div></dd>`;
+    } else {
+      rows += `<dt>${g.name}</dt><dd><span class="cell${
+        changed.has(g.addr) ? " hit" : mem[g.addr] ? "" : " zero"}">${mem[g.addr]}</span></dd>`;
+    }
+  }
+  rows += `<dt>tape</dt><dd><span class="cell${cur.tape ? "" : " zero"}">${cur.tape || 0}</span></dd>`;
+  stateEl.innerHTML = rows;
+
+  outEl.innerHTML = esc(lines.join("\n") + (lines.length && line ? "\n" : "") + line) +
+    (line ? '<span class="caret"></span>' : "");
+  if (!lines.length && !line) outEl.innerHTML = '<span style="color:#4d5663">— nothing printed yet —</span>';
+
+  const head = gaugeEl.querySelector("#head");
+  if (head) {
+    const x = (t / Math.max(1, N)) * 600;
+    head.setAttribute("x1", x); head.setAttribute("x2", x);
+  }
+  document.getElementById("t").textContent = t;
+  scrub.value = t;
+  const dir = document.getElementById("dir");
+  const forward = !cur.d || cur.d > 0;
+  dir.textContent = forward ? "→" : "←";
+  dir.className = "dir " + (forward ? "f" : "b");
+}
+
+function stop() {
+  clearInterval(timer); timer = null;
+  document.getElementById("play").textContent = "play";
+}
+function play() {
+  if (timer) return stop();
+  if (t >= N) goTo(0);
+  document.getElementById("play").textContent = "pause";
+  timer = setInterval(() => { if (t >= N) return stop(); goTo(t + 1); }, 40);
+}
+document.getElementById("play").onclick = play;
+document.getElementById("fwd").onclick = () => { stop(); goTo(t + 1); };
+document.getElementById("back").onclick = () => { stop(); goTo(t - 1); };
+document.getElementById("home").onclick = () => { stop(); goTo(0); };
+document.getElementById("end").onclick = () => { stop(); goTo(N); };
+scrub.oninput = e => { stop(); goTo(+e.target.value); };
+document.getElementById("lab").addEventListener("keydown", e => {
+  if (e.key === "ArrowRight") { stop(); goTo(t + (e.shiftKey ? 10 : 1)); }
+  else if (e.key === "ArrowLeft") { stop(); goTo(t - (e.shiftKey ? 10 : 1)); }
+  else return;
+  e.preventDefault();
+});
+select(0);
+</script>
