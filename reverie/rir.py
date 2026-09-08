@@ -482,13 +482,13 @@ class CWhileStmt(CStmt):
         self.counter = counter
 
     def lower(self, b: "CodeBuilder") -> None:
-        w = b.emit(isa.CHead(self.cond, self.counter, self.span))
+        f = b.emit(isa.CFrom(self.counter, self.span))
+        u = b.emit(isa.CUntil(self.cond, self.counter, self.span))
         self.body.lower(b)
-        t = b.emit(isa.CTail(self.span))
-        x = b.emit(isa.CExit(self.counter, self.span))
-        b.code[w].tail, b.code[w].exit_at = t, x
-        b.code[t].head = w
-        b.code[x].head, b.code[x].tail = w, t
+        r = b.emit(isa.CRepeat(self.counter, self.span))
+        b.code[f].repeat = r
+        b.code[u].repeat = r
+        b.code[r].from_at, b.code[r].until = f, u
 
     def children(self):
         return (self.body,)

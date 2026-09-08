@@ -569,10 +569,17 @@ class If(Instr):
 
 
 class ElseEnd(Instr):
-    """Closes the then-branch: asserts the exit test and jumps past ``fi``."""
+    """Closes the then-branch: asserts the exit test and jumps past ``fi``.
+
+    Never executed backwards.  Going the other way, ``fi`` jumps straight to
+    this instruction's *boundary*, so that a forward run and its reversal
+    execute the same number of instructions -- which is what makes it safe to
+    reverse the machine in the middle of a conditional.
+    """
 
     __slots__ = ("exit_cond", "fi")
     name = "else_end"
+    backward_unreachable = True
 
     def __init__(self, exit_cond: Expr, span: Optional[Span] = None) -> None:
         super().__init__(span)
@@ -588,8 +595,8 @@ class ElseEnd(Instr):
             )
         m.pc = self.fi + 1
 
-    def backward(self, m) -> None:
-        m.pc = self.at
+    def backward(self, m) -> None:  # pragma: no cover - unreachable
+        raise RuntimeFault("fell into else_end going backwards", pc=self.at)
 
     def operands(self) -> str:
         return f"{self.exit_cond.render()} fi->{self.fi}"
@@ -649,7 +656,9 @@ class Fi(Instr):
         m.pc = self.at + 1
 
     def backward(self, m) -> None:
-        m.pc = (self.then_end if self.exit_cond.eval(m) != 0 else self.else_end) + 1
+        # Land on the boundary the forward run departed from: the then-branch
+        # leaves through `else_end`, the else-branch through `fi` itself.
+        m.pc = self.then_end if self.exit_cond.eval(m) != 0 else self.at
 
     def operands(self) -> str:
         return f"{self.exit_cond.render()} then_end->{self.then_end} else_end->{self.else_end}"
@@ -933,9 +942,11 @@ class CIf(Instr):
         self.fi = -1
 
     def forward(self, m) -> None:
-        v = 1 if self.cond.eval(m) != 0 else 0
-        m.history.append(v)
-        m.pc = self.at + 1 if v else self.else_begin + 1
+        # No tape entry here.  The branch is recorded where the two paths meet
+        # (`celse_end` / `cfi`), so that when the machine walks back into the
+        # conditional the bit is the *first* thing it finds, above everything
+        # the branch body itself wrote.
+        m.pc = self.at + 1 if self.cond.eval(m) != 0 else self.else_begin + 1
 
     def backward(self, m) -> None:
         m.pc = self.at
@@ -950,16 +961,18 @@ class CIf(Instr):
 class CElseEnd(Instr):
     __slots__ = ("fi",)
     name = "celse_end"
+    backward_unreachable = True
 
     def __init__(self, span: Optional[Span] = None) -> None:
         super().__init__(span)
         self.fi = -1
 
     def forward(self, m) -> None:
+        m.history.append(1)
         m.pc = self.fi + 1
 
-    def backward(self, m) -> None:
-        m.pc = self.at
+    def backward(self, m) -> None:  # pragma: no cover - unreachable
+        raise RuntimeFault("fell into celse_end going backwards", pc=self.at)
 
     def operands(self) -> str:
         return f"fi->{self.fi}"
@@ -995,30 +1008,64 @@ class CFi(Instr):
         self.if_at = -1
 
     def forward(self, m) -> None:
+        m.history.append(0)
         m.pc = self.at + 1
 
     def backward(self, m) -> None:
         if not m.history:
             raise RuntimeFault("history tape underflow in cfi", pc=self.at)
         v = m.history.pop()
-        m.pc = (self.then_end if v else self.else_end) + 1
+        m.pc = self.then_end if v else self.at
 
     def operands(self) -> str:
         return f"then_end->{self.then_end} else_end->{self.else_end}"
 
 
-class CHead(Instr):
-    """Head of a classical ``while``.  Counts iterations into a frame cell."""
+class CFrom(Instr):
+    """Head of a classical ``while``.
 
-    __slots__ = ("cond", "counter", "tail", "exit_at")
-    name = "chead"
+    Classical loops get the same skeleton as reversible ones -- head, test,
+    tail -- because that shape is what makes the loop-back edge reversible: the
+    edge lands *after* the head, so the head is the instruction that decides,
+    on the way back, whether this was the first entry or another iteration.  A
+    reversible ``from`` loop settles that with its entry predicate; a classical
+    loop has no predicate to offer, so it counts iterations into a frame cell
+    instead.
+    """
+
+    __slots__ = ("counter", "repeat")
+    name = "cfrom"
+
+    def __init__(self, counter: int, span: Optional[Span] = None) -> None:
+        super().__init__(span)
+        self.counter = counter
+        self.repeat = -1
+
+    def forward(self, m) -> None:
+        if m.mem[m.fp + self.counter] != 0:
+            raise RuntimeFault(
+                "classical loop counter was not zero on entry", pc=self.at
+            )
+        m.pc = self.at + 1
+
+    def backward(self, m) -> None:
+        m.pc = self.at if m.mem[m.fp + self.counter] == 0 else self.repeat
+
+    def operands(self) -> str:
+        return f"cnt=%{self.counter} repeat->{self.repeat}"
+
+
+class CUntil(Instr):
+    """The test of a classical ``while``; counts iterations on the way in."""
+
+    __slots__ = ("cond", "counter", "repeat")
+    name = "cuntil"
 
     def __init__(self, cond: Expr, counter: int, span: Optional[Span] = None) -> None:
         super().__init__(span)
         self.cond = cond
         self.counter = counter
-        self.tail = -1
-        self.exit_at = -1
+        self.repeat = -1
 
     def forward(self, m) -> None:
         c = m.fp + self.counter
@@ -1028,65 +1075,52 @@ class CHead(Instr):
         else:
             m.history.append(m.mem[c])
             m.mem[c] = 0
-            m.pc = self.exit_at + 1
+            m.pc = self.repeat + 1
 
     def backward(self, m) -> None:
-        c = m.fp + self.counter
-        m.mem[c] -= 1
-        m.pc = self.tail + 1 if m.mem[c] > 0 else self.at
+        m.mem[m.fp + self.counter] -= 1
+        m.pc = self.at
 
     def operands(self) -> str:
-        return f"{self.cond.render()} cnt=%{self.counter} exit->{self.exit_at}"
+        return f"{self.cond.render()} cnt=%{self.counter} repeat->{self.repeat}"
 
     def refs(self):
         return (self.cond,)
 
 
-class CTail(Instr):
-    __slots__ = ("head",)
-    name = "ctail"
+class CRepeat(Instr):
+    """Closes a classical loop; also the loop's backward entry point."""
 
-    def __init__(self, span: Optional[Span] = None) -> None:
-        super().__init__(span)
-        self.head = -1
-
-    def forward(self, m) -> None:
-        m.pc = self.head
-
-    def backward(self, m) -> None:
-        m.pc = self.at
-
-    def operands(self) -> str:
-        return f"head->{self.head}"
-
-
-class CExit(Instr):
-    """Backward entry point of a classical loop; unreachable going forward."""
-
-    __slots__ = ("head", "tail", "counter")
-    name = "cexit"
-    forward_unreachable = True
+    __slots__ = ("counter", "from_at", "until")
+    name = "crepeat"
 
     def __init__(self, counter: int, span: Optional[Span] = None) -> None:
         super().__init__(span)
         self.counter = counter
-        self.head = -1
-        self.tail = -1
+        self.from_at = -1
+        self.until = -1
 
-    def forward(self, m) -> None:  # pragma: no cover - unreachable by construction
-        raise RuntimeFault("fell into cexit going forward", pc=self.at)
+    def forward(self, m) -> None:
+        if m.mem[m.fp + self.counter] == 0:
+            raise RuntimeFault(
+                "classical loop reached its tail without counting an iteration",
+                pc=self.at,
+            )
+        m.pc = self.from_at + 1
 
     def backward(self, m) -> None:
         c = m.fp + self.counter
         if m.mem[c] != 0:
-            raise RuntimeFault("classical loop counter was not zero on exit", pc=self.at)
+            raise RuntimeFault(
+                "classical loop counter was not zero on reverse entry", pc=self.at
+            )
         if not m.history:
-            raise RuntimeFault("history tape underflow in cexit", pc=self.at)
+            raise RuntimeFault("history tape underflow in crepeat", pc=self.at)
         m.mem[c] = m.history.pop()
-        m.pc = self.tail + 1 if m.mem[c] > 0 else self.head
+        m.pc = self.until
 
     def operands(self) -> str:
-        return f"head->{self.head} tail->{self.tail} cnt=%{self.counter}"
+        return f"cnt=%{self.counter} from->{self.from_at} until->{self.until}"
 
 
 #: every instruction class, keyed by mnemonic -- used by the assembler
@@ -1120,8 +1154,8 @@ INSTRUCTIONS = {
         CElseEnd,
         CElseBegin,
         CFi,
-        CHead,
-        CTail,
-        CExit,
+        CFrom,
+        CUntil,
+        CRepeat,
     )
 }
