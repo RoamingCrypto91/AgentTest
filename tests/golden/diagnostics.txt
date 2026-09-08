@@ -1,0 +1,91 @@
+error: `x` may not appear in the right-hand side of an update
+ --> bad.rev:5:10
+  |
+5 |     x += x * 2;
+  |          ^ reads the variable being updated
+  |
+note: a reversible update is undone by re-evaluating this
+note: expression, so it must not depend on the target
+note: introduce `local int t = ...;` if you need the old value
+
+error: `a` may not appear in an index on the left of an update
+ --> bad.rev:6:7
+  |
+6 |     a[a[0]] += 1;
+  |       ^^^^ reads the variable being updated
+  |
+note: a reversible update is undone by re-evaluating this
+note: expression, so it must not depend on the target
+note: introduce `local int t = ...;` if you need the old value
+
+error: `f` refers to the global `x` by name, so it cannot also receive it as an argument
+ --> bad.rev:8:12
+  |
+8 |     call f(x);
+  |            ^ aliases a global the callee already uses
+  |
+note: the parameter and the global would be two names for one
+note: cell, and an update could then read the cell it writes
+note: rename the global, or copy it into a `local` first
+
+error: `f` takes 1 argument(s), 2 given
+ --> bad.rev:9:5
+  |
+9 |     call f(x, x);
+  |     ^^^^^^^^^^^^^
+  |
+
+error: `f` refers to the global `x` by name, so it cannot also receive it as an argument
+ --> bad.rev:9:12
+  |
+9 |     call f(x, x);
+  |            ^ aliases a global the callee already uses
+  |
+note: the parameter and the global would be two names for one
+note: cell, and an update could then read the cell it writes
+note: rename the global, or copy it into a `local` first
+
+error: `x` is passed twice to `f`
+ --> bad.rev:9:15
+  |
+9 |     call f(x, x);
+  |               ^
+  |
+note: two parameters bound to the same cell would let the callee
+note: update a variable using itself
+
+error: `f` refers to the global `x` by name, so it cannot also receive it as an argument
+ --> bad.rev:9:15
+  |
+9 |     call f(x, x);
+  |               ^ aliases a global the callee already uses
+  |
+note: the parameter and the global would be two names for one
+note: cell, and an update could then read the cell it writes
+note: rename the global, or copy it into a `local` first
+
+error: `fi;` reuses the entry test, but `x` is modified inside the conditional
+  --> bad.rev:10:5
+   |
+10 |     if x > 0 { x += 1; } fi;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+note: write an explicit exit predicate: `} fi <expr>;`
+note: it must be true after the then-branch and false after the else
+
+error: unknown name `y`
+  --> bad.rev:11:5
+   |
+11 |     y += 1;
+   |     ^
+   |
+note: did you mean `t`?
+
+error: this local is never released: `t`
+ --> bad.rev:7:5
+  |
+7 |     local int t = 1;
+  |     ^^^^^^^^^^^^^^^^
+  |
+note: add a matching `delocal` before the end of the block --
+note: leaving the block would otherwise erase the cell

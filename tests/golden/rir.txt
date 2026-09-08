@@ -1,0 +1,54 @@
+@x += 1
+if (@x > 0) then
+  @a[0] += @x
+else
+  @a[1] -= @x
+fi (@a[0] != 0)
+local i = 0
+from (%i+0 == 0) do
+  @y += @a[%i+0]
+loop
+  %i+0 += 1
+until (%i+0 == (4 - 1))
+delocal i = (4 - 1)
+call helper(@x, @y)
+uncall helper(@x, @y)
+local t = 0
+push(%t+0, @s)
+delocal t = 0
+local r = 0
+local __out0 = 0
+call __embed_1(%r+0, %__out0+1)
+@y ^= %__out0+1
+uncall __embed_1(%r+0, %__out0+1)
+delocal __out0 = 0
+delocal r = 0
+print 'y = ', @y
+
+--- inverted ---
+unprint 'y = ', @y
+local r = 0
+local __out0 = 0
+call __embed_1(%r+0, %__out0+1)
+@y ^= %__out0+1
+uncall __embed_1(%r+0, %__out0+1)
+delocal __out0 = 0
+delocal r = 0
+local t = 0
+pop(%t+0, @s)
+delocal t = 0
+call helper(@x, @y)
+uncall helper(@x, @y)
+local i = (4 - 1)
+from (%i+0 == (4 - 1)) do
+  @y -= @a[%i+0]
+loop
+  %i+0 -= 1
+until (%i+0 == 0)
+delocal i = 0
+if (@a[0] != 0) then
+  @a[0] -= @x
+else
+  @a[1] += @x
+fi (@x > 0)
+@x -= 1

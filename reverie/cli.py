@@ -117,7 +117,8 @@ def parse_assignments(pairs: list[str]) -> dict:
     return out
 
 
-def show_globals(m: Machine, stream=sys.stdout) -> None:
+def show_globals(m: Machine, stream=None) -> None:
+    stream = stream or sys.stdout
     g = m.globals_dict()
     if not g:
         return

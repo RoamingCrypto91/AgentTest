@@ -1,0 +1,52 @@
+globals:
+  @0    x                    int
+  @1    y                    int
+  @2    a                    array[4]
+  @6    s                    stack
+
+    0  call main()
+    1  halt
+
+    2  entry helper
+    3  upd &p += (&q * 2)
+    4  upd &q ^= 3
+    5  exit helper
+
+    6  entry main
+    7  upd @x += 1
+    8  if (@x > 0) else->11 fi->13
+    9  upd @a[0] += @x
+   10  else_end (@a[0] != 0) fi->13
+   11  else_begin (@x > 0) if->8
+   12  upd @a[1] -= @x
+   13  fi (@a[0] != 0) then_end->10 else_end->12
+   14  local %0 = 0
+   15  from (%i+0 == 0) until->17 repeat->19
+   16  upd @y += @a[%i+0]
+   17  until (%i+0 == (4 - 1)) from->15 repeat->19
+   18  upd %i+0 += 1
+   19  repeat entry=(%i+0 == 0) exit=(%i+0 == (4 - 1)) from->15 until->17
+   20  delocal %0 = (4 - 1)
+   21  call helper(@x, @y)
+   22  uncall helper(@x, @y)
+   23  local %0 = 0
+   24  push %t+0, @s
+   25  delocal %0 = 0
+   26  local %0 = 0
+   27  local %1 = 0
+   28  call __embed_1(%r+0, %__out0+1)
+   29  upd @y ^= %__out0+1
+   30  uncall __embed_1(%r+0, %__out0+1)
+   31  delocal %1 = 0
+   32  delocal %0 = 0
+   33  emit 'y = ', @y
+   34  exit main
+
+   35  entry __embed_1
+   36  cset &r = 0
+   37  cfrom cnt=%0 repeat->40
+   38  cuntil (&r < @x) cnt=%0 repeat->40
+   39  cset &r = (&r + 1)
+   40  crepeat cnt=%0 from->37 until->38
+   41  cset &__out0 = &r
+   42  exit __embed_1

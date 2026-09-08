@@ -1,0 +1,42 @@
+const K = 4;
+
+int x;
+int y;
+int a[K];
+stack s;
+
+/// A little of everything, so the snapshot notices any change in codegen.
+proc helper(int p, int q) {
+    p += q * 2;
+    q ^= 3;
+}
+
+proc main() {
+    x += 1;
+    if x > 0 {
+        a[0] += x;
+    } else {
+        a[1] -= x;
+    } fi a[0] != 0;
+    local int i = 0;
+    from i == 0 do {
+        y += a[i];
+    } loop {
+        i += 1;
+    } until i == K - 1;
+    delocal int i = K - 1;
+    call helper(x, y);
+    undo {
+        call helper(x, y);
+    }
+    local int t = 0;
+    push(t, s);
+    delocal int t = 0;
+    embed (y ^= r) {
+        var r = 0;
+        while (r < x) {
+            r = r + 1;
+        }
+    }
+    print "y = ", y;
+}
