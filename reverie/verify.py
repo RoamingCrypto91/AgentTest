@@ -24,6 +24,12 @@ feeds it random arguments, and checks two properties on each one:
     leaves the state unchanged.  This is the *program's* promise, and it goes
     through different code: the second half enters the body at its far end.
 
+``inverse``
+    ``call f(x)`` followed by a call to the procedure ``rev invert`` prints for
+    ``f`` leaves the state unchanged.  Nothing about that program came from the
+    machine: it is a source-to-source transformation, running forwards through
+    ordinary instructions, and this is what holds it to the same claim.
+
 When a case fails, the input is shrunk until no single simplification keeps it
 failing, so what gets reported is small enough to read.
 
@@ -51,12 +57,13 @@ from . import ast
 from .checker import analyze
 from .compiler import Compiler
 from .diagnostics import ReverieError, RuntimeFault, Source
+from .inverter import invert_proc
 from .parser import parse
 from .printer import print_type
 from .vm import Machine, Program, state_equal
 
 #: properties checked on every case, in the order they are tried
-PROPERTIES = ("undo", "uncall")
+PROPERTIES = ("undo", "uncall", "inverse")
 
 DEFAULT_CASES = 100
 DEFAULT_LENGTH = 6
@@ -89,6 +96,7 @@ class Failure:
         what = {
             "undo": "running it backwards did not restore the starting state",
             "uncall": "call, then uncall, did not leave the state alone",
+            "inverse": "the procedure `rev invert` prints did not undo it",
         }[self.prop]
         return f"{what}: {self.reason}"
 
@@ -142,6 +150,8 @@ REQUIRES = "requires:"
 SETUP = "setup:"
 GIVEN = "given:"
 OK_GLOBAL = "__verify_ok"
+#: the name the printed inverse is given inside a driver
+INVERSE = "__verify_inverse"
 
 
 def directive(decl: ast.ProcDecl, tag: str) -> list:
@@ -234,6 +244,10 @@ def driver_source(decl: ast.ProcDecl, argnames: list, sizes: list, need_main: bo
         f"proc __verify_round() {{ {prepare}call {decl.name}({args});"
         f" uncall {decl.name}({args});{unprepare} }}"
     )
+    lines.append(
+        f"proc __verify_mirror() {{ {prepare}call {decl.name}({args});"
+        f" call {INVERSE}({args});{unprepare} }}"
+    )
     if requires:
         # The condition is written against the procedure's own parameter names,
         # so give the guard the procedure's own signature and it needs no
@@ -281,12 +295,14 @@ class Driver:
         text = driver_source(decl, self.argnames, sizes, need_main,
                              self.requires, self.setup)
         extra = parse(Source(f"<driver for {decl.name}>", text))
-        merged = ast.Module(list(module.decls) + list(extra.decls), module.source_name)
+        decls = list(module.decls) + list(extra.decls) + [invert_proc(decl, INVERSE)]
+        merged = ast.Module(decls, module.source_name)
         self.analysis = analyze(merged)
         if not self.analysis.ok:
             raise ReverieError(self.analysis.diagnostics.errors[0].message)
         self.once = Compiler(merged, self.analysis).compile("__verify_once")
         self.round = Compiler(merged, self.analysis).compile("__verify_round")
+        self.mirror = Compiler(merged, self.analysis).compile("__verify_mirror")
         self.guard = (
             Compiler(merged, self.analysis).compile("__verify_guard")
             if self.requires else None
@@ -449,7 +465,8 @@ def _machine(prog: Program, values: dict, mem: int, max_steps: int, paranoid: bo
 def check_case(driver: Driver, values: dict, prop: str, *, mem: int,
                max_steps: int, paranoid: bool) -> tuple[Optional[Failure], int]:
     """Run one property on one input.  Returns (failure or None, steps)."""
-    prog = driver.once if prop == "undo" else driver.round
+    prog = {"undo": driver.once, "uncall": driver.round,
+            "inverse": driver.mirror}[prop]
     m = _machine(prog, values, mem, max_steps, paranoid)
     before = m.snapshot()
     try:

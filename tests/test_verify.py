@@ -94,8 +94,8 @@ def test_a_different_seed_still_finds_it():
     eq(r.failure.inputs, {"x": 1, "y": 0})
 
 
-def test_both_properties_are_checked():
-    eq(V.PROPERTIES, ("undo", "uncall"))
+def test_every_property_is_checked():
+    eq(V.PROPERTIES, ("undo", "uncall", "inverse"))
     for prop in V.PROPERTIES:
         f = V.Failure(prop, "why", {})
         is_true(f.describe(), "every property needs a sentence")
@@ -117,6 +117,28 @@ def test_uncall_is_run_forwards_not_as_an_undo():
     d = V.Driver(m, m.find_proc("bump"), 4)
     eq(calls(d.round), ["call bump", "uncall bump"])
     eq(calls(d.once, "__verify_once"), ["call bump"])
+
+
+def test_the_third_property_calls_the_printed_inverse():
+    m = module(GOOD)
+    d = V.Driver(m, m.find_proc("bump"), 4)
+    eq(calls(d.mirror, "__verify_mirror"), ["call bump", "call __verify_inverse"])
+
+
+def test_the_inverse_property_has_teeth():
+    """With the inverter neutered, a procedure that is not self-inverse fails."""
+    m = module(GOOD)
+    real = V.invert_proc
+    V.invert_proc = lambda decl, rename: real(decl, rename).__class__(
+        decl.span, rename, list(decl.params), decl.body, decl.doc
+    )
+    try:
+        r = V.verify_proc(m, m.find_proc("bump"), cases=20)
+    finally:
+        V.invert_proc = real
+    is_true(not r.ok, "calling `bump` twice should not be the identity")
+    eq(r.failure.prop, "inverse")
+    contains(r.failure.describe(), "rev invert")
 
 
 # ---------------------------------------------------------------------------
@@ -381,7 +403,7 @@ proc countdown(int n, int acc) {
 """ + MAIN
     r = check(text, "countdown", cases=4, max_steps=400)
     is_true(r.ok, "a step limit is not a counterexample")
-    eq(r.gave_up, 2)  # both properties gave up on the one input there is
+    eq(r.gave_up, 3)  # every property gave up on the one input there is
 
 
 def test_generated_procedures_are_not_verified():

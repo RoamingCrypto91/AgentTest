@@ -361,7 +361,10 @@ rev doctor   prog.rev              reversibility and thermodynamic cost
 rev verify   prog.rev [--proc f]   search for inputs it cannot undo
 ```
 
-`rev verify` takes `--cases N` (inputs per procedure), `--seed N`, `--len N`
+`rev verify` checks each procedure three ways on every input it draws:
+forward-then-backward is the identity, `call f; uncall f;` leaves the state
+alone, and the procedure `rev invert` prints undoes the original. It takes
+`--cases N` (inputs per procedure), `--seed N`, `--len N`
 (the length of generated arrays), `--range N` (how large generated integers
 get), `--globals` (also vary the globals each procedure touches, off by
 default because most procedures are written to start from a particular state),

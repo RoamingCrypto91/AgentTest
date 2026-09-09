@@ -545,11 +545,12 @@ footer .file { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
       </p>
       <p>
         <code>rev verify</code> builds a driver around each procedure, hands it
-        random arguments, and checks two things: that forward-then-backward
-        restores the starting state, and that <code>call f</code> followed by
-        <code>uncall f</code> leaves it alone. The second is not the first
-        run twice — it enters the body at the far end, with time still pointing
-        forwards.
+        random arguments, and checks three things: that forward-then-backward
+        restores the starting state, that <code>call f</code> followed by
+        <code>uncall f</code> leaves it alone, and that the procedure
+        <code>rev invert</code> prints really undoes the original. They are not
+        the same test run three times — the last one leaves the machine’s
+        reversal out entirely and runs a transformed program forwards.
       </p>
       <p class="callout">
         A random counterexample is unreadable, so it gets shrunk: try simpler

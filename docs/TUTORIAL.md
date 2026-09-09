@@ -290,16 +290,17 @@ $ rev verify stdlib/array.rev --cases 20
 ```
 
 `rev verify` builds a driver around every procedure in the file, hands it
-random arguments, and checks two things on each one: that running it forwards
-and then backwards restores the starting state, and that `call f` followed by
-`uncall f` leaves the state alone. When one fails, the input is shrunk until no
-smaller one still fails, and what you get is the counterexample and the line
-that rejected it:
+random arguments, and checks three things on each one: that running it forwards
+and then backwards restores the starting state, that `call f` followed by
+`uncall f` leaves the state alone, and that the procedure `rev invert` prints
+for `f` really undoes `f`. When one fails, the input is shrunk until no smaller
+one still fails, and what you get is the counterexample and the line that
+rejected it:
 
 ```
   drain(int x, int y)     3 cases   FAILED
       running it backwards did not restore the starting state: exit assertion
-      `(&x > 0)` must hold after the then-branch
+      `(x > 0)` must hold after the then-branch
       smallest input found: x = 1, y = 0
 ```
 

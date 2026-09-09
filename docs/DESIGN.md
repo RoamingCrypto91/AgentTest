@@ -233,12 +233,18 @@ instruction at a time.
 
 Everything above tests *the implementation*. The same property tests programs,
 and `rev verify` is that: for each procedure in a file it builds a driver,
-draws random arguments, and checks that a forward run followed by a backward
-one is the identity, and that `call f; uncall f;` leaves the state alone.
-Those two are not the same test. The first walks the machine backwards through
-the body; the second runs the inverted body forwards, entering it at the far
-end, with the arrow of logical time still pointing forward. They exercise
-different paths through the frame and branch machinery.
+draws random arguments, and checks three things: that a forward run followed by
+a backward one is the identity, that `call f; uncall f;` leaves the state
+alone, and that the procedure `rev invert` prints for `f` undoes `f`.
+
+They are not the same test. The first walks the machine backwards through the
+body. The second runs the inverted body forwards, entering it at the far end,
+with the arrow of logical time still pointing forward — different paths through
+the frame and branch machinery. The third leaves the machine's reversal out
+entirely: `rev invert` is a source-to-source transformation, and the program it
+produces runs forwards through ordinary instructions. If the inverter and the
+machine ever disagreed about what the inverse of a program is, this is what
+would say so.
 
 The interesting part is what happens when a case fails. A random counterexample
 is usually unreadable, so the search shrinks it: try simpler inputs, keep any

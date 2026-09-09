@@ -219,8 +219,9 @@ lands exactly where stepping would.
 
 `rev verify` turns that specification on your own code. It builds a driver
 around each procedure in a file, hands it random arguments, and checks that
-running it forwards and then backwards restores the starting state, and that
-`call f` followed by `uncall f` changes nothing. No expected outputs, no
+running it forwards and then backwards restores the starting state, that
+`call f` followed by `uncall f` changes nothing, and that the procedure
+`rev invert` prints really undoes the original. No expected outputs, no
 oracle, no test file — the procedure's own `fi` predicates and `delocal`
 expressions are the specification, and the machine already checks them.
 
@@ -244,7 +245,7 @@ composition is the identity, so errors that cancel survive it. Three did — see
 `docs/DESIGN.md`.
 
 ```console
-$ python3 tests/run_tests.py                 # 823 cases
+$ python3 tests/run_tests.py                 # 825 cases
 $ python3 tests/run_tests.py --slow --repeat 8   # several thousand generated programs
 $ python3 tests/run_tests.py --seed 1234     # reproduce a fuzz failure
 $ python3 tools/coverage.py                  # 97% of reverie/, no dependencies
@@ -297,7 +298,7 @@ reverie/
   cli.py                                 rev
 stdlib/    array, math, bits, sort
 examples/  fourteen programs
-tests/     a dependency-free runner, a program generator, 823 cases
+tests/     a dependency-free runner, a program generator, 825 cases
 tools/     coverage, benchmarks, and the page builder
 ```
 
