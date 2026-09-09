@@ -13,7 +13,7 @@ back where you started.  That is the whole test, and it is the same test for
 every procedure ever written.
 
 This module automates the search.  It builds a driver around the procedure,
-feeds it random arguments, and checks two properties on each one:
+feeds it random arguments, and checks three properties on each one:
 
 ``undo``
     Running the call forwards and then running the machine backwards restores
@@ -38,19 +38,21 @@ when ``lo`` and ``hi`` actually bracket a slice, and a search that ignores that
 reports a bug that is really a missing sentence of documentation.  So a
 procedure may state its domain in its doc comment::
 
-    /// Reverse the slice xs[lo..hi] in place.
-    /// requires: 0 <= lo && lo <= hi + 1 && hi < len(xs)
+    /// Reverse xs[lo .. hi) in place.
+    /// requires: 0 <= lo && lo <= hi && hi <= len(xs)
 
 The condition is an ordinary Reverie expression over the parameters.  It is
 compiled and run like any other code -- there is no second little language
 here -- and inputs that fail it are never offered to the procedure, during the
-search or during shrinking.
+search or during shrinking.  Two more directives handle what a filter cannot:
+``given:`` pins an argument or sizes an array, and ``setup:`` names code that
+builds a state no predicate could describe.  See `pinned` and `preparation`.
 """
 
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Iterator, Optional
 
 from . import ast
@@ -273,23 +275,25 @@ class Driver:
         self.explore_globals = explore_globals
         self.signature = signature(decl)
         taken = {d.name for d in module.decls if hasattr(d, "name")}
-        base = "__arg" if "__arg" not in taken else "__verify_arg"
-        self.argnames = [
-            _fresh(f"{base}_{p.name}", taken) for p in decl.params
-        ]
+        self.argnames = [_fresh(f"__arg_{p.name}", taken) for p in decl.params]
         need_main = module.find_proc("main") is None
         self.requires = requirement(decl)
         self.setup = preparation(decl)
         by_param = dict(zip((p.name for p in decl.params), self.argnames))
+        kinds = {p.name: kind_of(p.type) for p in decl.params}
         values, lengths = pinned(decl)
         self.given = {}
         for name, value in values.items():
             if name not in by_param:
                 raise ReverieError(f"`given: {name}` is not a parameter of {decl.name}")
+            if kinds[name] == "stack":
+                raise ReverieError(f"`given: {name}` cannot pin a stack to a number")
             self.given[by_param[name]] = value
         for name in lengths:
             if name not in by_param:
                 raise ReverieError(f"`given: len({name})` is not a parameter of {decl.name}")
+            if kinds[name] != "array":
+                raise ReverieError(f"`given: len({name})` -- {name} is not an array")
         self.lengths = {by_param[k]: v for k, v in lengths.items()}
         sizes = [self.lengths.get(a, length) for a in self.argnames]
         text = driver_source(decl, self.argnames, sizes, need_main,
@@ -309,8 +313,13 @@ class Driver:
         )
         self.slots = self._slots()
 
-    def satisfies(self, values: dict, mem: int = 1 << 12) -> bool:
-        """Is this input inside the domain the procedure claims?"""
+    def satisfies(self, values: dict, mem: int = 0) -> bool:
+        """Is this input inside the domain the procedure claims?
+
+        A rejected draw is redrawn, so this runs far more often than the
+        procedure itself does; the machine it builds is sized to the globals
+        and nothing more.
+        """
         if self.guard is None:
             return True
         m = Machine(self.guard, mem_size=mem, max_steps=100_000)

@@ -639,7 +639,7 @@ def test_the_search_stops_early_if_the_domain_dries_up():
     seen = []
     real = V.Driver.satisfies
 
-    def once(self, values, mem=1 << 12):
+    def once(self, values, mem=0):
         seen.append(values)
         return len(seen) == 1
 
@@ -663,3 +663,15 @@ proc bump(int x, int k) {
 """ + MAIN
     r = check(text, "bump", cases=30)
     eq(r.cases, 2, "there are only two inputs in the domain")
+
+
+def test_a_pinned_stack_is_rejected():
+    text = "/// given: s = 1\nproc f(stack s, int x) { push(x, s); }" + MAIN
+    r = check(text, "f", cases=2)
+    contains(r.skipped, "cannot pin a stack")
+
+
+def test_a_length_only_makes_sense_for_an_array():
+    text = "/// given: len(x) = 4\nproc f(int x) { x += 1; }" + MAIN
+    r = check(text, "f", cases=2)
+    contains(r.skipped, "is not an array")

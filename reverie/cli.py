@@ -391,7 +391,7 @@ def cmd_verify(args) -> int:
         paranoid=args.paranoid,
         explore_globals=args.globals,
     )
-    print(V.render(reports, args.file))
+    print(V.render(reports, "<stdin>" if args.file == "-" else args.file))
     return 0 if all(r.ok for r in reports) else 1
 
 

@@ -353,3 +353,20 @@ def test_verify_checks_every_step_when_asked():
     path = write("int n; proc main() { n += 1; }")
     cap = rev("verify", path, "--paranoid", "--cases", "3")
     contains(cap.text, "every procedure was reversible")
+
+
+def test_verify_reads_stdin():
+    old = sys.stdin
+    sys.stdin = io.StringIO("int q; proc main() { q += 1; }")
+    try:
+        cap = rev("verify", "-", "--cases", "3")
+    finally:
+        sys.stdin = old
+    contains(cap.text, "<stdin>")
+    contains(cap.text, "every procedure was reversible")
+
+
+def test_verify_reports_a_source_error_like_every_other_command():
+    path = write("proc f(int x) { x += 1 }")
+    cap = rev("verify", path, expect=1)
+    contains(cap.errors + cap.text, "expected `;`")
