@@ -45,19 +45,39 @@ def read_source(path: str) -> Source:
 
 
 def resolve_import(path: str, importer: str) -> str:
+    """Find an imported module among the search roots.
+
+    An import names a module, not an arbitrary file: the resolved path has to
+    end in ``.rev`` and live inside one of the roots.  Otherwise a program
+    could reach out of its own directory, and a parse error would quote lines
+    of whatever it found.
+    """
+    if os.path.isabs(path):
+        raise ReverieError(
+            f"import paths are relative to the search roots, not absolute: {path!r}"
+        )
     roots = [os.path.dirname(os.path.abspath(importer)), os.getcwd()]
     here = os.path.dirname(os.path.abspath(__file__))
     roots.append(os.path.join(os.path.dirname(here), "stdlib"))
     roots.extend(p for p in os.environ.get(PRELUDE_ENV, "").split(os.pathsep) if p)
     here_real = os.path.abspath(importer)
     for root in roots:
+        real_root = os.path.abspath(root)
         for candidate in (
             os.path.join(root, path),
             os.path.join(root, path + ".rev") if not path.endswith(".rev") else None,
         ):
             if candidate is None or not os.path.exists(candidate):
                 continue
-            if os.path.abspath(candidate) == here_real:
+            resolved = os.path.abspath(candidate)
+            if not resolved.endswith(".rev"):
+                continue
+            if os.path.commonpath([resolved, real_root]) != real_root:
+                raise ReverieError(
+                    f"the module {path!r} resolves outside the search roots",
+                    notes=[f"it points at {resolved}"],
+                )
+            if resolved == here_real:
                 continue  # a module never imports itself; keep looking
             return candidate
     raise ReverieError(

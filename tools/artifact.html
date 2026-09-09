@@ -289,7 +289,7 @@ footer .file { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
 </style>
 
 <div class="shell masthead">
-  <p class="eyebrow">a programming language · 12,000 lines · no dependencies</p>
+  <p class="eyebrow">a language, a compiler, a machine, a debugger · no dependencies</p>
   <h1>Reverie</h1>
   <p class="thesis">
     Every program here runs <em>backwards</em>. Not replayed from a log —
@@ -523,6 +523,11 @@ footer .file { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
         thing reverses” as if it meant “each step reverses”. In a machine that
         supports stopping and turning around, it does not.
       </p>
+      <p class="callout" style="font-size:14px">
+        That property is now a switch. <code>rev run --paranoid</code> takes
+        each step, undoes it, checks that nothing moved, and redoes it — so any
+        program, not only a generated one, can be held to it.
+      </p>
     </div>
   </div>
 </section>
@@ -537,13 +542,18 @@ footer .file { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
         <li><span class="file">rir.py · compiler.py</span><br><span class="muted">lowering, and inversion as an IR operation</span></li>
         <li><span class="file">debugger.py · viz.py</span><br><span class="muted">travelling through an execution</span></li>
       </ul>
+      <p class="muted" style="margin-top:12px">
+        8,000 lines of Python for the language, 7,000 more for the tests that
+        try to break it. Nothing outside the standard library.
+      </p>
     </div>
     <div>
-      <h3>eleven examples</h3>
+      <h3>thirteen examples</h3>
       <ul class="muted">
         <li><span class="file">fibonacci</span> — uncall inverts a function</li>
         <li><span class="file">rle</span> — the encoder backwards is the decoder</li>
         <li><span class="file">sorting</span> — the permutation, written down</li>
+        <li><span class="file">turing</span> — a Turing machine, unrun from its history</li>
         <li><span class="file">critters</span> — a cellular automaton that un-evolves</li>
         <li><span class="file">cipher</span> — decryption is <code>uncall</code></li>
         <li><span class="file">hanoi</span> — reversible recursion over three stacks</li>

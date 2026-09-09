@@ -92,6 +92,7 @@ def main() -> int:
     ap.add_argument("--show", default="",
                     help="list missed lines (comma-separated module names)")
     ap.add_argument("--min", type=float, default=0.0, help="fail below this percent")
+    ap.add_argument("--no-color", action="store_true", help="passed through to the runner")
     args = ap.parse_args()
 
     sys.path.insert(0, ROOT)

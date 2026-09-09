@@ -1,0 +1,42 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      # No dependencies to install: Reverie is the standard library and nothing
+      # else, tests included.
+      - name: tests
+        run: python3 tests/run_tests.py --no-color --durations
+
+      - name: property tests, harder
+        run: python3 tests/run_tests.py --no-color --slow --repeat 3
+
+      - name: a different seed
+        run: python3 tests/run_tests.py --no-color --seed ${{ github.run_number }}
+
+      - name: coverage
+        run: python3 tools/coverage.py --no-color --min 90
+
+      - name: every example, checking each step as it runs
+        run: |
+          for f in examples/*.rev; do
+            echo "--- $f"
+            python3 -m reverie check "$f"
+          done
+
+      - name: benchmarks
+        run: python3 tools/bench.py --quick

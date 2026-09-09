@@ -245,3 +245,48 @@ def test_stdin_input():
         contains(cap.text, "x = 2")
     finally:
         sys.stdin = old
+
+
+# ---------------------------------------------------------------------------
+# an import names a module, not an arbitrary file
+# ---------------------------------------------------------------------------
+
+
+def test_absolute_imports_are_refused():
+    path = write('import "/etc/passwd";\nproc main() { skip; }')
+    cap = rev("run", path, expect=1)
+    contains(cap.errors, "not absolute")
+
+
+def test_imports_may_not_escape_the_search_roots():
+    d = tempfile.mkdtemp(prefix="reverie-")
+    os.makedirs(os.path.join(d, "sub"))
+    with open(os.path.join(d, "secret.rev"), "w") as fh:
+        fh.write("int leaked;\n")
+    path = os.path.join(d, "sub", "prog.rev")
+    with open(path, "w") as fh:
+        fh.write('import "../secret.rev";\nproc main() { skip; }')
+    cap = rev("run", path, expect=1)
+    contains(cap.errors, "outside the search roots")
+
+
+def test_imports_must_name_a_reverie_module():
+    d = tempfile.mkdtemp(prefix="reverie-")
+    with open(os.path.join(d, "notes.txt"), "w") as fh:
+        fh.write("int x;\n")
+    path = os.path.join(d, "prog.rev")
+    with open(path, "w") as fh:
+        fh.write('import "notes.txt";\nproc main() { skip; }')
+    cap = rev("run", path, expect=1)
+    contains(cap.errors, "cannot find module")
+
+
+def test_a_sibling_import_still_works():
+    d = tempfile.mkdtemp(prefix="reverie-")
+    with open(os.path.join(d, "lib.rev"), "w") as fh:
+        fh.write("proc bump(int p) { p += 7; }\n")
+    path = os.path.join(d, "prog.rev")
+    with open(path, "w") as fh:
+        fh.write('import "lib.rev";\nint x;\nproc main() { call bump(x); }')
+    cap = rev("run", path)
+    contains(cap.text, "x = 7")

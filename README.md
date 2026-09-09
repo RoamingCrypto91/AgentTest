@@ -174,7 +174,9 @@ $ ./rev viz    examples/sorting.rev --set xs=5,3,9,1,7,2,8,4 -o sorting.html
 $ python3 tests/run_tests.py
 ```
 
-No dependencies. Python 3.11 and the standard library, tests included.
+No dependencies. Python 3.11 and the standard library, tests included —
+8,000 lines for the language and 7,000 more for the tests that try to break
+it.
 
 ### The examples
 
@@ -219,7 +221,7 @@ composition is the identity, so errors that cancel survive it. Three did — see
 `docs/DESIGN.md`.
 
 ```console
-$ python3 tests/run_tests.py                 # 636 cases
+$ python3 tests/run_tests.py                 # 732 cases
 $ python3 tests/run_tests.py --slow --repeat 8   # several thousand generated programs
 $ python3 tests/run_tests.py --seed 1234     # reproduce a fuzz failure
 $ python3 tools/coverage.py                  # 96% of reverie/, no dependencies
@@ -259,7 +261,7 @@ reverie/
   cli.py                                 rev
 stdlib/    array, math, bits, sort
 examples/  eleven programs
-tests/     a dependency-free runner, a program generator, 636 cases
+tests/     a dependency-free runner, a program generator, 732 cases
 tools/     coverage, benchmarks, and the page builder
 ```
 
