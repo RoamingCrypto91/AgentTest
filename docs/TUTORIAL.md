@@ -275,10 +275,59 @@ $ rev debug examples/tour.rev --set n=1000000
 
 ---
 
+## 9. Let the language test itself
+
+A procedure in a normal language needs a test with an expected answer, written
+by hand. A procedure in Reverie already carries one: every `fi` predicate,
+every loop's entry assertion, every `delocal` expression is a claim the machine
+checks. Feed a procedure an input and it either completes or tells you the
+input was outside the region where it is invertible.
+
+So the tests can write themselves:
+
+```console
+$ rev verify stdlib/array.rev --cases 20
+```
+
+`rev verify` builds a driver around every procedure in the file, hands it
+random arguments, and checks two things on each one: that running it forwards
+and then backwards restores the starting state, and that `call f` followed by
+`uncall f` leaves the state alone. When one fails, the input is shrunk until no
+smaller one still fails, and what you get is the counterexample and the line
+that rejected it:
+
+```
+  drain(int x, int y)     3 cases   FAILED
+      running it backwards did not restore the starting state: exit assertion
+      `(&x > 0)` must hold after the then-branch
+      smallest input found: x = 1, y = 0
+```
+
+Not every procedure is total. `swap_at(xs, i, j)` is only reversible when `i`
+and `j` are real indices, and a search that ignores that is reporting a missing
+sentence of documentation as a bug. So a procedure may say what it needs, in a
+doc comment, in ordinary Reverie:
+
+```reverie
+/// Swap two elements.  Self-inverse.
+/// requires: 0 <= i && i < len(xs) && 0 <= j && j < len(xs)
+proc swap_at(int xs[], int i, int j) {
+    xs[i] <=> xs[j];
+}
+```
+
+There are three of these, and `docs/LANGUAGE.md` spells them out: `requires:`
+filters generated inputs, `given:` pins one to a value or fixes an array's
+length, and `setup:` names code that builds a state no predicate could
+describe — a stocked peg for `hanoi`, say. Every procedure in `stdlib/` and
+`examples/` carries whatever it needs, and all of them pass.
+
+---
+
 ## Where next
 
 - `docs/LANGUAGE.md` — every construct, precisely
 - `docs/ISA.md` — what the machine actually executes
 - `docs/DESIGN.md` — why the pieces are shaped this way, and three bugs the
   fuzzer found
-- `examples/` — eleven programs, each making one point
+- `examples/` — fourteen programs, each making one point

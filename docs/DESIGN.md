@@ -229,6 +229,39 @@ valid program never reaches, which makes them invisible to end-to-end testing
 and exactly the kind of check that rots. Those are now driven directly, one
 instruction at a time.
 
+### The same oracle, pointed at your code
+
+Everything above tests *the implementation*. The same property tests programs,
+and `rev verify` is that: for each procedure in a file it builds a driver,
+draws random arguments, and checks that a forward run followed by a backward
+one is the identity, and that `call f; uncall f;` leaves the state alone.
+Those two are not the same test. The first walks the machine backwards through
+the body; the second runs the inverted body forwards, entering it at the far
+end, with the arrow of logical time still pointing forward. They exercise
+different paths through the frame and branch machinery.
+
+The interesting part is what happens when a case fails. A random counterexample
+is usually unreadable, so the search shrinks it: try simpler inputs, keep any
+that still fails, stop when nothing simpler does. `drain(x, y)` above reduces to
+`x = 1, y = 0` — the smallest input for which the conditional's exit test is
+wrong.
+
+**Partiality had to be dealt with.** `swap_at(xs, i, j)` is not reversible for
+`i = -1`; neither is any other procedure that indexes an array. Reporting that
+as a bug is reporting a missing sentence of documentation, so a procedure may
+state its domain: `requires:` filters generated inputs through an ordinary
+Reverie expression, `given:` pins an argument that rejection sampling would
+never hit, and `setup:` names code that builds a state no predicate can
+describe. The conditions are compiled by the same compiler and run on the same
+machine as everything else — a guard is a procedure, not an interpreter for a
+second little language.
+
+Writing those annotations for the shipped code was itself the test. It found
+two undocumented preconditions in `stdlib/array.rev`, three in `bits.rev`, one
+in `math.rev`, and one real interpreter bug: `x >> -1` raised a Python
+`ValueError` and printed a traceback instead of trapping. Shifts are checked
+now, both ends.
+
 ---
 
 ## What it costs

@@ -45,6 +45,26 @@ def imod(a: int, b: int) -> int:
     return r if a >= 0 else -r
 
 
+#: shifting further than this would build an integer too big to hold.  A
+#: program that shifts by a million places has already gone wrong; it should
+#: hear about it as a trap rather than as an exhausted machine.
+SHIFT_LIMIT = 1 << 22
+
+
+def ishl(a: int, b: int) -> int:
+    if b < 0:
+        raise RuntimeFault(f"negative shift count {b}")
+    if b > SHIFT_LIMIT or (a != 0 and b + abs(a).bit_length() > SHIFT_LIMIT):
+        raise RuntimeFault("shift too large (would exhaust memory)")
+    return a << b
+
+
+def ishr(a: int, b: int) -> int:
+    if b < 0:
+        raise RuntimeFault(f"negative shift count {b}")
+    return a >> b
+
+
 def ipow(a: int, b: int) -> int:
     if b < 0:
         raise RuntimeFault(f"negative exponent {b}")
@@ -219,8 +239,8 @@ BINOPS = {
     "&": lambda a, b: a & b,
     "|": lambda a, b: a | b,
     "^": lambda a, b: a ^ b,
-    "<<": lambda a, b: a << b,
-    ">>": lambda a, b: a >> b,
+    "<<": ishl,
+    ">>": ishr,
     "==": lambda a, b: int(a == b),
     "!=": lambda a, b: int(a != b),
     "<": lambda a, b: int(a < b),

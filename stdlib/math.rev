@@ -29,6 +29,7 @@ proc gcd(int a, int b, int out) {
 }
 
 /// out ^= a**e mod m, by square-and-multiply.
+/// requires: m > 0
 proc powmod(int a, int e, int m, int out) {
     embed (out ^= r) {
         var r = 1 % m;

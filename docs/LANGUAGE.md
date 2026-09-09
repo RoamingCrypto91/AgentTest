@@ -293,6 +293,41 @@ flips the sign of a `+=` binding and nothing else.
 
 ---
 
+## Stating a domain
+
+Not every procedure is defined on every input. `swap_at(xs, i, j)` needs two
+real indices; `hanoi` needs a peg with discs already on it. Nothing in the
+language enforces such a precondition — the machine will simply trap when one
+is broken — but a procedure can *state* one, in its doc comment, for
+`rev verify` to respect. Three directives, each a line of its own:
+
+```reverie
+/// requires: 0 <= i && i < len(xs)
+/// given: dst = 0, used = 0, len(dst) = 32
+/// setup: call stack_up(src, n);
+proc example(int xs[], int i, int dst[], int used, stack src, int n) { skip; }
+```
+
+`requires:` is an ordinary Reverie expression over the procedure's parameters.
+It is compiled and run like any other code — there is no second small language
+here — and generated inputs that fail it are discarded, during the search and
+during shrinking alike. Several `requires:` lines are combined with `&&`.
+
+`given:` pins an argument to a value rather than filtering for it. A
+precondition like `a == 0 && b == 0` is a needle that random draws would spend
+their whole budget missing, and an output argument that must start empty is the
+same shape of problem. `given: len(xs) = 32` fixes an array argument's length
+instead of its contents.
+
+`setup:` names statements to run before the property is checked, and undo
+afterwards. Some preconditions are not conditions at all: no predicate over a
+freshly generated empty stack will ever be true of a stocked one. What such a
+procedure needs is a constructor, not a filter, and it may name one. The
+statements are written against its own parameters.
+
+These are comments. `rev run` neither reads nor enforces them; they say what
+the procedure claims, and `rev verify` is what holds it to the claim.
+
 ## The four static rules
 
 1. **No self-reference in an update.** `x += f(…)` is undone by `x -= f(…)`, so
@@ -323,7 +358,14 @@ rev debug    prog.rev [-c CMD]     the time-travel debugger
 rev trace    prog.rev [-o t.json]  record an execution
 rev viz      prog.rev [-o p.html]  a scrubbable page
 rev doctor   prog.rev              reversibility and thermodynamic cost
+rev verify   prog.rev [--proc f]   search for inputs it cannot undo
 ```
+
+`rev verify` takes `--cases N` (inputs per procedure), `--seed N`, `--len N`
+(the length of generated arrays), `--range N` (how large generated integers
+get), `--globals` (also vary the globals each procedure touches, off by
+default because most procedures are written to start from a particular state),
+`--paranoid`, and `--max-steps N`. It exits non-zero if any procedure failed.
 
 `--set` takes `name=value`, `name=0xFF`, or `name=1,2,3` for arrays and stacks.
 Imports are resolved against the importing file's directory, the working

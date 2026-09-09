@@ -30,6 +30,7 @@ stack lengths;  // how many steps each increment took
 /// state 2 — halted.
 ///
 /// The four rules are numbered 1..4, and the number is what gets recorded.
+/// requires: 0 <= at && at < len(cells)
 proc tm_step(int cells[], int at, int st, stack log) {
     local int rule = 0;
     if st == 0 {
@@ -56,6 +57,7 @@ proc tm_step(int cells[], int at, int st, stack log) {
 }
 
 /// Run the simulated machine until it halts, then rearm it.
+/// given: cells = 0, at = 0, st = 0
 proc increment(int cells[], int at, int st, stack log, stack sizes) {
     local int n = 0;
     from n == 0 do {

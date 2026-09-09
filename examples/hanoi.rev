@@ -17,6 +17,11 @@ stack moves;
 
 int placed;
 
+/// Move n discs from src to dst.  The source peg must be stocked first,
+/// which is a precondition no predicate can express -- so it names the
+/// procedure that builds one instead.
+/// requires: n >= 1 && n <= 4
+/// setup: call stack_up(src, n);
 proc hanoi(int n, stack src, stack via, stack dst, stack log) {
     if n > 0 {
         n -= 1;
@@ -37,6 +42,8 @@ proc hanoi(int n, stack src, stack via, stack dst, stack log) {
     } fi n > 0;
 }
 
+/// Stack n discs on an empty peg, largest first.
+/// requires: n >= 1
 proc stack_up(stack peg, int n) {
     local int i = 0;
     from i == 0 do {

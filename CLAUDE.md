@@ -11,10 +11,10 @@ way they are.
 
 ```
 reverie/     the language: lexer parser ast printer checker compiler rir
-             isa vm inverter debugger trace viz cli
+             isa vm inverter debugger trace viz verify cli
 stdlib/      array, math, bits, sort — written in Reverie
-examples/    thirteen programs, each making one point
-tests/       a dependency-free runner, a random program generator, ~730 cases
+examples/    fourteen programs, each making one point
+tests/       a dependency-free runner, a random program generator, ~800 cases
 tools/       coverage, benchmarks, and the showcase page builder
 docs/        tutorial, language reference, ISA, design notes
 ```
@@ -28,6 +28,7 @@ python3 tests/run_tests.py --slow --repeat 5  # the property tests, harder
 python3 tests/run_tests.py --seed 1234        # reproduce a fuzz failure
 python3 tools/coverage.py --show vm.py        # what is untested
 python3 tools/bench.py                        # what it costs
+./rev verify stdlib/array.rev                 # hold a library to its own domain
 ./rev run examples/turing.rev                 # the CLI
 ```
 
@@ -68,6 +69,10 @@ example is tested under it.
 - No input should produce a Python traceback — `tests/test_robustness.py`
   fuzzes the front end to make sure. Failures are `ReverieError` or
   `RuntimeFault`, never `ValueError` or `RecursionError`.
+- A procedure that is not total says so in its doc comment, with `requires:`,
+  `given:` or `setup:` (see `docs/LANGUAGE.md`). `rev verify` respects those
+  and nothing else does; `tests/test_verify.py` holds every shipped procedure
+  to whatever it claims.
 - Docs are executed, not just written: `tests/test_docs.py` parses every
   Reverie snippet and runs every `$ rev …` transcript, comparing line by line.
   Change the behaviour, change the transcript.

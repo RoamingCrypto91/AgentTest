@@ -5,6 +5,7 @@
 // `int xs[]` and take their length from the caller.
 
 /// Reverse xs[lo .. hi) in place.  Self-inverse.
+/// requires: 0 <= lo && lo <= hi && hi <= len(xs)
 proc reverse_range(int xs[], int lo, int hi) {
     local int i = lo;
     local int j = hi - 1;
@@ -42,6 +43,7 @@ proc rotate(int xs[], int k) {
 }
 
 /// Swap two elements.  Self-inverse.
+/// requires: 0 <= i && i < len(xs) && 0 <= j && j < len(xs)
 proc swap_at(int xs[], int i, int j) {
     xs[i] <=> xs[j];
 }
@@ -98,6 +100,7 @@ proc max_into(int xs[], int acc) {
 }
 
 /// ys ^= xs, elementwise.  Self-inverse.  The arrays must be the same length.
+/// requires: len(xs) == len(ys)
 proc xor_arrays(int xs[], int ys[]) {
     local int i = 0;
     from i == 0 do {

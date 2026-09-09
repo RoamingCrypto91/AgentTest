@@ -290,3 +290,66 @@ def test_a_sibling_import_still_works():
         fh.write('import "lib.rev";\nint x;\nproc main() { call bump(x); }')
     cap = rev("run", path)
     contains(cap.text, "x = 7")
+
+
+# ---------------------------------------------------------------------------
+# verify
+# ---------------------------------------------------------------------------
+
+
+BAD_PROC = """
+proc drain(int x, int y) {
+    if x > 0 {
+        x -= 1;
+    } else {
+        y += 1;
+    } fi x > 0;
+}
+proc main() { }
+"""
+
+
+def test_verify_reports_a_clean_library():
+    cap = rev("verify", os.path.join(STDLIB, "array.rev"), "--cases", "8")
+    contains(cap.text, "every procedure was reversible on every input tried")
+    contains(cap.text, "reverse_range(int xs[], int lo, int hi)")
+
+
+def test_verify_fails_and_says_why():
+    path = write(BAD_PROC)
+    cap = rev("verify", path, "--cases", "40", expect=1)
+    contains(cap.text, "FAILED")
+    contains(cap.text, "smallest input found: x = 1, y = 0")
+    contains(cap.text, "1 of 2 procedures failed")
+
+
+def test_verify_can_be_pointed_at_one_procedure():
+    path = write(BAD_PROC)
+    cap = rev("verify", path, "--proc", "main", "--cases", "5")
+    contains(cap.text, "1 procedure,")
+    is_true("drain" not in cap.text, "only `main` was asked for")
+
+
+def test_verify_rejects_a_procedure_that_is_not_there():
+    path = write(BAD_PROC)
+    cap = rev("verify", path, "--proc", "nope", expect=1)
+    contains(cap.errors + cap.text, "no procedure named")
+
+
+def test_verify_takes_a_seed_and_repeats_itself():
+    path = write(BAD_PROC)
+    a = rev("verify", path, "--seed", "7", "--cases", "30", expect=1)
+    b = rev("verify", path, "--seed", "7", "--cases", "30", expect=1)
+    eq(a.text, b.text)
+
+
+def test_verify_can_vary_globals_too():
+    path = write("int n; proc main() { n += 1; }")
+    cap = rev("verify", path, "--globals", "--cases", "6")
+    contains(cap.text, "cases")
+
+
+def test_verify_checks_every_step_when_asked():
+    path = write("int n; proc main() { n += 1; }")
+    cap = rev("verify", path, "--paranoid", "--cases", "3")
+    contains(cap.text, "every procedure was reversible")

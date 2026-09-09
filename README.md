@@ -171,6 +171,7 @@ $ ./rev back   examples/rle.rev  --set data=1,1,1,4,4,7,7,7   # encode, then dec
 $ ./rev doctor examples/primes.rev        # the thermodynamic bill
 $ ./rev run    examples/hanoi.rev --paranoid   # check every step as it runs
 $ ./rev viz    examples/sorting.rev --set xs=5,3,9,1,7,2,8,4 -o sorting.html
+$ ./rev verify stdlib/sort.rev            # hunt for inputs it cannot undo
 $ python3 tests/run_tests.py
 ```
 
@@ -214,6 +215,28 @@ inverse, that the two independent inverters (syntax tree and structured IR)
 agree, that formatting preserves behaviour, and that the debugger's `goto`
 lands exactly where stepping would.
 
+### The tests a program writes for itself
+
+`rev verify` turns that specification on your own code. It builds a driver
+around each procedure in a file, hands it random arguments, and checks that
+running it forwards and then backwards restores the starting state, and that
+`call f` followed by `uncall f` changes nothing. No expected outputs, no
+oracle, no test file — the procedure's own `fi` predicates and `delocal`
+expressions are the specification, and the machine already checks them.
+
+```console
+$ ./rev verify examples/hanoi.rev --cases 12
+```
+
+A failing input is shrunk until no smaller one still fails, so what comes back
+is a counterexample you can read and the line that rejected it. Procedures that
+are only defined on part of their input space say so in a doc comment —
+`requires:` for a condition, `given:` to pin an argument, `setup:` to build a
+state no condition could describe — and the search respects it. Writing those
+three lines for `stdlib/` turned up two undocumented preconditions and one
+genuine interpreter bug: a negative shift count raised a Python error instead
+of a trap.
+
 The strongest property is per-step rather than end-to-end: from every reachable
 point, step back and forward again and demand bit-for-bit equality of state
 *and* program counter. Round-tripping a whole program only shows that the
@@ -221,10 +244,10 @@ composition is the identity, so errors that cancel survive it. Three did — see
 `docs/DESIGN.md`.
 
 ```console
-$ python3 tests/run_tests.py                 # 742 cases
+$ python3 tests/run_tests.py                 # 800 cases
 $ python3 tests/run_tests.py --slow --repeat 8   # several thousand generated programs
 $ python3 tests/run_tests.py --seed 1234     # reproduce a fuzz failure
-$ python3 tools/coverage.py                  # 96% of reverie/, no dependencies
+$ python3 tools/coverage.py                  # 97% of reverie/, no dependencies
 $ python3 tools/mutate.py                    # would the tests notice if it broke?
 $ python3 tools/bench.py                     # and what it costs
 ```
@@ -270,10 +293,11 @@ reverie/
   isa.py vm.py                           the bidirectional machine
   inverter.py                            source-to-source program inversion
   debugger.py trace.py viz.py            stepping and watching
+  verify.py                              the search for inputs it cannot undo
   cli.py                                 rev
 stdlib/    array, math, bits, sort
-examples/  eleven programs
-tests/     a dependency-free runner, a program generator, 742 cases
+examples/  fourteen programs
+tests/     a dependency-free runner, a program generator, 800 cases
 tools/     coverage, benchmarks, and the page builder
 ```
 
@@ -289,4 +313,5 @@ What is new here is the assembly: a real bidirectional bytecode machine where
 the program counter is a boundary index so reversing time is two sign flips; a
 compiler that exposes inversion as both a statement and a command-line verb; an
 `embed` construct that lets destructive code and reversible code share a
-program; and a test methodology that turns reversibility itself into the oracle.
+program; a search that holds any procedure to its own stated domain; and a
+test methodology that turns reversibility itself into the oracle.

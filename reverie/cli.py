@@ -11,6 +11,7 @@
     rev trace    prog.rev  [-o trace.json]  record an execution
     rev viz      prog.rev  [-o out.html]    build a scrubbable visualiser
     rev doctor   prog.rev                   report on reversibility and cost
+    rev verify   prog.rev  [--proc f]       hunt for inputs it cannot undo
 """
 
 from __future__ import annotations
@@ -373,6 +374,27 @@ def cmd_doctor(args) -> int:
     return 0 if ok else 1
 
 
+def cmd_verify(args) -> int:
+    """Search each procedure's inputs for one it cannot undo."""
+    from . import verify as V
+
+    module = load_module(args.file)
+    reports = V.verify_module(
+        module,
+        args.proc,
+        cases=args.cases,
+        seed=args.seed,
+        length=args.len,
+        magnitude=args.range,
+        mem=args.mem,
+        max_steps=args.max_steps,
+        paranoid=args.paranoid,
+        explore_globals=args.globals,
+    )
+    print(V.render(reports, args.file))
+    return 0 if all(r.ok for r in reports) else 1
+
+
 # ---------------------------------------------------------------------------
 # argument parsing
 # ---------------------------------------------------------------------------
@@ -460,6 +482,26 @@ def make_parser() -> argparse.ArgumentParser:
                    help="check every individual step as well as the whole run")
     p.add_argument("--max-steps", type=int, default=50_000_000)
     p.set_defaults(func=cmd_doctor)
+
+    p = sub.add_parser("verify", help="search for inputs a procedure cannot undo")
+    p.add_argument("file", help="a .rev source file (or - for stdin)")
+    p.add_argument("--proc", action="append", default=None,
+                   help="procedure to check (repeatable; default: all of them)")
+    p.add_argument("--cases", type=int, default=100,
+                   help="how many inputs to try for each procedure")
+    p.add_argument("--seed", type=int, default=0, help="seed for the search")
+    p.add_argument("--len", type=int, default=8,
+                   help="length of generated array arguments")
+    p.add_argument("--range", type=int, default=12,
+                   help="how large generated integers may get")
+    p.add_argument("--globals", action="store_true",
+                   help="also vary the globals each procedure touches")
+    p.add_argument("--paranoid", action="store_true",
+                   help="check every individual step of every case")
+    p.add_argument("--mem", type=int, default=8192, help="machine memory cells")
+    p.add_argument("--max-steps", type=int, default=200_000,
+                   help="give up on a case after this many instructions")
+    p.set_defaults(func=cmd_verify)
     return ap
 
 

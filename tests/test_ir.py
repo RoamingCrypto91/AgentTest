@@ -16,6 +16,8 @@ from reverie.ir import (
     idiv,
     imod,
     ipow,
+    ishl,
+    ishr,
 )
 
 
@@ -71,6 +73,28 @@ def test_power():
         ipow(2, -1)
     with raises(RuntimeFault, "too large"):
         ipow(3, 10_000_000)
+
+
+def test_shifting():
+    eq(ishl(3, 4), 48)
+    eq(ishr(48, 4), 3)
+    eq(ishr(-1, 40), -1)
+
+
+def test_a_negative_shift_is_a_trap_not_a_python_error():
+    """Found by `rev verify`, which handed `bitrev` a width of zero."""
+    with raises(RuntimeFault, "negative shift count"):
+        ishl(1, -1)
+    with raises(RuntimeFault, "negative shift count"):
+        ishr(1, -1)
+
+
+def test_a_shift_that_would_exhaust_memory_is_a_trap():
+    with raises(RuntimeFault, "too large"):
+        ishl(1, 1 << 30)
+    with raises(RuntimeFault, "too large"):
+        ishl(255, 1 << 22)
+    eq(ishr(1, 1 << 30), 0, "shifting right is always cheap")
 
 
 # ---------------------------------------------------------------------------

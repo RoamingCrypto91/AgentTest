@@ -6,7 +6,8 @@
 // afterwards, which is exactly what the `delocal` expressions below do.
 
 /// Gray-code x in place over `width` bits: bit i becomes x_i xor x_{i+1}.
-/// `uncall gray_encode` decodes.  Requires width >= 2 and 0 <= x < 2**width.
+/// `uncall gray_encode` decodes.
+/// requires: width >= 2 && 0 <= x && x < (1 << width)
 proc gray_encode(int x, int width) {
     local int i = 0;
     from i == 0 do {
@@ -23,6 +24,7 @@ proc gray_encode(int x, int width) {
 }
 
 /// Reverse the low `width` bits of x in place.  Self-inverse.
+/// requires: width >= 2 && 0 <= x && x < (1 << width)
 proc bitrev(int x, int width) {
     local int i = 0;
     from i == 0 do {
@@ -58,6 +60,7 @@ proc popcount(int x, int out) {
 
 /// Rotate the low `width` bits of x left by one place.  Self-inverse only
 /// when width is 1 or 2; otherwise `uncall` rotates right.
+/// requires: width >= 3 && 0 <= x && x < (1 << width)
 proc rotate_left(int x, int width) {
     local int i = 0;
     from i == 0 do {

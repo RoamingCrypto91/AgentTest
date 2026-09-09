@@ -28,6 +28,7 @@ proc feistel(int l, int r) {
 }
 
 /// Encrypt every pair of cells in place.
+/// requires: len(block) % 2 == 0
 proc encrypt(int block[]) {
     local int i = 0;
     from i == 0 do {
@@ -38,6 +39,7 @@ proc encrypt(int block[]) {
     delocal int i = len(block) - 2;
 }
 
+/// requires: 0 <= i && i + 1 < len(block)
 proc feistel_at(int block[], int i) {
     local int l = 0;
     local int r = 0;
