@@ -166,6 +166,7 @@ class Machine:
         mem_size: int = 1 << 16,
         max_steps: int = 5_000_000,
         trace: Optional[Callable[["Machine", Instr], None]] = None,
+        paranoid: bool = False,
     ) -> None:
         self.program = program
         self.mem: list[int] = [0] * max(mem_size, program.n_globals + 64)
@@ -192,6 +193,8 @@ class Machine:
         self.halted = False
         self.max_steps = max_steps
         self.trace = trace
+        #: check every step for invertibility as it happens.  See `step`.
+        self.paranoid = paranoid
         # stack-typed globals hold a 1-based stack id
         for g in program.globals.values():
             if g.kind == "stack":
@@ -276,7 +279,84 @@ class Machine:
         machine has nothing left to do in the current direction -- it reached
         ``halt`` going forwards, or the very beginning of the program going
         backwards.
+
+        In paranoid mode each step is checked as it happens: the machine takes
+        the step, undoes it, verifies that everything is exactly as it was, and
+        redoes it.  That is the property the test suite proves for generated
+        programs, available as a switch for real ones -- three times the work
+        and a lot of copying, but nothing about a program can hide from it.
         """
+        if self.paranoid:
+            return self._checked_step()
+        return self._step()
+
+    # -- the paranoid check -----------------------------------------------
+    def fingerprint(self) -> tuple:
+        """Everything a step could have changed, cheap enough to compare.
+
+        Only cells below the stack pointer are live, so the frames above it are
+        not part of the machine's state and are excluded.
+        """
+        return (
+            self.pc,
+            self.fp,
+            self.sp,
+            tuple(self.mem[: self.sp]),
+            tuple(tuple(s) for s in self.stacks),
+            tuple(self.history),
+            len(self.output),
+            self.output[-1] if self.output else None,
+            self.line,
+            tuple((f.proc.name, f.base, tuple(f.params)) for f in self.frames),
+        )
+
+    def _checked_step(self) -> bool:
+        before = self.fingerprint()
+        pc0, dir0, arrow0 = self.pc, self.dir, self.arrow
+        if not self._step():
+            return False
+        # Everything after this point is bookkeeping about a step that has
+        # already happened, so the statistics are frozen here and restored at
+        # the end: the check must not show up in what the machine reports.
+        stats1 = _stat_tuple(self.stats)
+        position1 = self.position
+        after = self.fingerprint()
+        pc1, dir1, arrow1 = self.pc, self.dir, self.arrow
+        instr = self.program.code[pc0 if dir0 > 0 else pc0 - 1]
+
+        self.reverse()
+        self.halted = False
+        self._step()
+        if self.fingerprint() != before:
+            raise RuntimeFault(
+                f"`{instr.render()}` is not invertible: undoing it did not "
+                f"restore the machine",
+                pc=instr.at,
+                notes=[_first_difference(before, self.fingerprint())],
+            )
+        if self.dir != -dir0:
+            raise RuntimeFault(
+                f"`{instr.render()}` left the machine facing the wrong way "
+                f"when undone",
+                pc=instr.at,
+            )
+
+        self.dir, self.arrow = dir0, arrow0
+        self.halted = False
+        self._step()
+        if self.fingerprint() != after or (self.dir, self.arrow) != (dir1, arrow1):
+            raise RuntimeFault(
+                f"`{instr.render()}` is not deterministic: repeating it from "
+                f"the same state gave a different result",
+                pc=instr.at,
+                notes=[_first_difference(after, self.fingerprint())],
+            )
+        _restore_stats(self.stats, stats1)
+        self.position = position1
+        self.dir, self.arrow = dir1, arrow1
+        return True
+
+    def _step(self) -> bool:
         if self.halted:
             return False
         code = self.program.code
@@ -448,6 +528,46 @@ class Machine:
     def __repr__(self) -> str:  # pragma: no cover - debug helper
         arrow = "->" if self.dir > 0 else "<-"
         return f"<Machine pc={self.pc}{arrow} steps={self.stats.steps}>"
+
+
+#: the statistics a paranoid step must not disturb
+_STAT_FIELDS = (
+    "steps",
+    "forward_steps",
+    "backward_steps",
+    "history_pushes",
+    "history_pops",
+    "history_peak",
+    "history_bits",
+    "calls",
+    "max_depth",
+)
+
+
+def _stat_tuple(stats: Stats) -> tuple:
+    return tuple(getattr(stats, name) for name in _STAT_FIELDS)
+
+
+def _restore_stats(stats: Stats, saved: tuple) -> None:
+    for name, value in zip(_STAT_FIELDS, saved):
+        setattr(stats, name, value)
+
+
+def _first_difference(a: tuple, b: tuple) -> str:
+    """Name the first component of two fingerprints that differs."""
+    names = (
+        "pc", "fp", "sp", "memory", "stacks", "history tape",
+        "output length", "last output line", "open line", "frames",
+    )
+    for name, x, y in zip(names, a, b):
+        if x != y:
+            if name == "memory":
+                for i, (u, v) in enumerate(zip(x, y)):
+                    if u != v:
+                        return f"mem[{i}] was {u}, is now {v}"
+                return f"memory length changed: {len(x)} -> {len(y)}"
+            return f"{name} was {x!r}, is now {y!r}"
+    return "nothing differs (the comparison itself is wrong)"
 
 
 def state_equal(a: dict, b: dict) -> tuple[bool, str]:

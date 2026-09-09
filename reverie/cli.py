@@ -1,6 +1,7 @@
 """``rev`` -- the Reverie command line.
 
     rev run      prog.rev  [--set x=5]      run a program
+    rev run      prog.rev  --paranoid        ... checking every step as it runs
     rev back     prog.rev                   run it, then run it backwards
     rev check    prog.rev                   type/reversibility check only
     rev fmt      prog.rev  [-i]             format source
@@ -134,7 +135,8 @@ def show_globals(m: Machine, stream=None) -> None:
 
 def cmd_run(args) -> int:
     prog, src = build(args.file, args.entry)
-    m = Machine(prog, mem_size=args.mem, max_steps=args.max_steps)
+    m = Machine(prog, mem_size=args.mem, max_steps=args.max_steps,
+                paranoid=getattr(args, "paranoid", False))
     m.set_globals(parse_assignments(args.set))
     if args.backward:
         m.start_backward()
@@ -161,7 +163,8 @@ def cmd_run(args) -> int:
 def cmd_back(args) -> int:
     """Run forwards, then run backwards, and prove you got the start back."""
     prog, src = build(args.file, args.entry)
-    m = Machine(prog, mem_size=args.mem, max_steps=args.max_steps)
+    m = Machine(prog, mem_size=args.mem, max_steps=args.max_steps,
+                paranoid=getattr(args, "paranoid", False))
     m.set_globals(parse_assignments(args.set))
     before = m.snapshot()
     m.start_forward().run()
@@ -317,7 +320,8 @@ def cmd_viz(args) -> int:
 def cmd_doctor(args) -> int:
     """Report on what a program costs, thermodynamically speaking."""
     prog, src = build(args.file, args.entry)
-    m = Machine(prog, mem_size=args.mem, max_steps=args.max_steps)
+    m = Machine(prog, mem_size=args.mem, max_steps=args.max_steps,
+                paranoid=getattr(args, "paranoid", False))
     m.set_globals(parse_assignments(args.set))
     before = m.snapshot()
     m.start_forward().run()
@@ -342,6 +346,8 @@ def cmd_doctor(args) -> int:
     print(f"  bits erased       {m.bits_erased}"
           + ("" if leftover == 0 else f"  (WARNING: {leftover} tape entries left)"))
     print(f"  reversible        {'yes -- forward then backward is the identity' if ok else 'NO: ' + why}")
+    if getattr(args, "paranoid", False):
+        print(f"  every step        checked individually, and invertible")
     if forward_out:
         print(f"  output            {len(forward_out)} line(s)")
     return 0 if ok else 1
@@ -380,10 +386,15 @@ def make_parser() -> argparse.ArgumentParser:
     p.add_argument("--quiet", "-q", action="store_true", help="output only")
     p.add_argument("--check-clean", action="store_true",
                    help="assert the machine ends tidy")
+    p.add_argument("--paranoid", action="store_true",
+                   help="undo and redo every step as it happens, and stop if "
+                        "anything differs")
     p.add_argument("--max-steps", type=int, default=50_000_000)
     p.set_defaults(func=cmd_run)
 
     p = common(sub.add_parser("back", help="run forwards then backwards"))
+    p.add_argument("--paranoid", action="store_true",
+                   help="check every individual step as well as the whole run")
     p.add_argument("--max-steps", type=int, default=50_000_000)
     p.set_defaults(func=cmd_back)
 
@@ -425,6 +436,8 @@ def make_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_viz)
 
     p = common(sub.add_parser("doctor", help="report reversibility and cost"))
+    p.add_argument("--paranoid", action="store_true",
+                   help="check every individual step as well as the whole run")
     p.add_argument("--max-steps", type=int, default=50_000_000)
     p.set_defaults(func=cmd_doctor)
     return ap

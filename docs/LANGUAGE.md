@@ -313,6 +313,7 @@ names — is ordinary.
 
 ```
 rev run      prog.rev [--set x=5] [--stats] [--backward] [--check-clean]
+rev run      prog.rev --paranoid    check every step for invertibility as it runs
 rev back     prog.rev              run forwards, then backwards, prove the identity
 rev check    prog.rev              analyse without running
 rev fmt      prog.rev [-i]         format

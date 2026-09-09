@@ -169,6 +169,7 @@ throw information away.
 $ ./rev run    examples/critters.rev      # a cellular automaton that un-evolves
 $ ./rev back   examples/rle.rev  --set data=1,1,1,4,4,7,7,7   # encode, then decode
 $ ./rev doctor examples/primes.rev        # the thermodynamic bill
+$ ./rev run    examples/hanoi.rev --paranoid   # check every step as it runs
 $ ./rev viz    examples/sorting.rev --set xs=5,3,9,1,7,2,8,4 -o sorting.html
 $ python3 tests/run_tests.py
 ```

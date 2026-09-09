@@ -192,6 +192,28 @@ an inverse and not merely the loop as a whole.
 
 ---
 
+## Checking it as it runs
+
+`--paranoid` turns the property the test suite proves for generated programs
+into a switch for real ones. Each step is taken, undone, compared, and redone:
+
+```console
+$ rev run examples/sorting.rev --set xs=5,3,9,1,7,2,8,4 --paranoid
+```
+
+If anything differs the machine stops and names the instruction and the first
+component of the state that moved:
+
+```
+trap: `upd @x += 3` is not invertible: undoing it did not restore the machine
+note: mem[0] was 0, is now 6
+```
+
+It costs about three times the work and a great deal of copying, and it is
+invisible in what the machine reports afterwards -- the statistics are frozen
+across the check. `tests/test_paranoid.py` sabotages six instructions in turn
+to make sure it really does catch them.
+
 ## Cost
 
 The machine reports what it spent:
