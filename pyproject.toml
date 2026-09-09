@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "reverie-lang"
+version = "1.0.0"
+description = "A reversible programming language: programs that run backwards"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+keywords = ["reversible computing", "programming language", "compiler", "interpreter"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Software Development :: Compilers",
+  "Topic :: Software Development :: Interpreters",
+]
+
+# Reverie has no dependencies. Neither do its tests.
+dependencies = []
+
+[project.scripts]
+rev = "reverie.cli:main"
+
+[project.urls]
+Source = "https://github.com/RoamingCrypto91/AgentTest"
+
+[tool.setuptools]
+packages = ["reverie"]
+
+[tool.setuptools.package-data]
+reverie = ["../stdlib/*.rev"]

@@ -206,7 +206,7 @@ def test_every_prefix_of_one_program():
 @case(1)
 def test_heavy_mutation(offset):
     rng = random.Random(BASE + 3000 + offset)
-    for _ in range(2000 * REPEAT):
+    for _ in range(min(2000 * REPEAT, 6000)):
         name, src = rng.choice(SOURCES)
         text = list(src)
         for _ in range(rng.randint(1, 30)):

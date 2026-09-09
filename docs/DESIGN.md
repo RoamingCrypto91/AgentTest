@@ -206,6 +206,29 @@ All three are the same failure of imagination: treating "the whole thing
 reverses" as if it meant "each step reverses". In a machine that supports
 stopping and turning around, it does not.
 
+That property is now available as a switch rather than only as a test:
+`rev run --paranoid` takes each step, undoes it, compares a fingerprint of
+everything it could have touched, and redoes it.
+
+### Does the suite actually catch things?
+
+A passing test suite tells you the code does what the tests expect. It does
+not tell you the tests would notice if the code were wrong. `tools/mutate.py`
+breaks the machine deliberately — nudging a program counter, skipping an
+instruction body, undoing an update with the forward operator — and reports
+any mutant that survives.
+
+It found two holes, both the same shape: the oracle compared the final state
+but not how much work it took, so a mutant could slip in an extra no-op step
+and go unnoticed. The number of instructions executed is not an
+implementation detail here — it *is* the claim that reversal costs what
+execution costs — so it is compared now.
+
+It also showed that several of the machine's integrity checks guard states a
+valid program never reaches, which makes them invisible to end-to-end testing
+and exactly the kind of check that rots. Those are now driven directly, one
+instruction at a time.
+
 ---
 
 ## What it costs
@@ -261,3 +284,11 @@ language's defining property into the oracle.
   are dynamic in a way that stays balanced.
 - **Escape hatches.** There is no `unsafe`, no `forget`, no way to drop a value.
   A program that needs to discard something must say where it goes.
+- **An assembler.** `rev disasm` prints the bytecode, but there is no `rev asm`
+  to read it back. The disassembly is a *view*; making it round-trip would
+  freeze the renderer as a file format for no gain, since the bytecode is
+  reached through the compiler and the compiler is tested against the source.
+- **A `for` loop.** Every loop carries the boilerplate of a counter and its
+  `delocal`, and sugar could hide that. It would also hide the reason loops
+  carry two predicates, which is the thing the language is for. The
+  boilerplate stays.

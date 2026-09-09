@@ -38,5 +38,8 @@ jobs:
             python3 -m reverie check "$f"
           done
 
+      - name: mutation testing
+        run: python3 tools/mutate.py --quiet --min 95
+
       - name: benchmarks
         run: python3 tools/bench.py --quick

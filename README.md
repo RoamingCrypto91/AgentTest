@@ -221,12 +221,24 @@ composition is the identity, so errors that cancel survive it. Three did — see
 `docs/DESIGN.md`.
 
 ```console
-$ python3 tests/run_tests.py                 # 732 cases
+$ python3 tests/run_tests.py                 # 742 cases
 $ python3 tests/run_tests.py --slow --repeat 8   # several thousand generated programs
 $ python3 tests/run_tests.py --seed 1234     # reproduce a fuzz failure
 $ python3 tools/coverage.py                  # 96% of reverie/, no dependencies
+$ python3 tools/mutate.py                    # would the tests notice if it broke?
 $ python3 tools/bench.py                     # and what it costs
 ```
+
+There is also `rev run --paranoid`, which holds *any* program to the per-step
+property as it runs: take the step, undo it, check nothing moved, redo it.
+Every shipped example is tested under it.
+
+And because a passing suite only tells you the code does what the tests
+expect, `tools/mutate.py` breaks the machine on purpose — one instruction at a
+time — and reports any deliberate bug that nothing catches. It found two: an
+oracle that compared final state but not how much work it took, which let a
+mutant slip in an extra step. The number of instructions executed is part of
+the machine's contract, so it is compared now.
 
 Reversal is not a slow path. About 1.4 million instructions a second in
 CPython, with backward execution within noise of forward — there is no log to
@@ -261,7 +273,7 @@ reverie/
   cli.py                                 rev
 stdlib/    array, math, bits, sort
 examples/  eleven programs
-tests/     a dependency-free runner, a program generator, 732 cases
+tests/     a dependency-free runner, a program generator, 742 cases
 tools/     coverage, benchmarks, and the page builder
 ```
 

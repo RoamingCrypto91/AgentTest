@@ -235,6 +235,8 @@ def main() -> int:
     ap.add_argument("--label", default="", help="one mutation, by its label")
     ap.add_argument("--full", action="store_true", help="use the whole test suite")
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--min", type=float, default=0.0,
+                    help="fail below this percentage of mutants caught")
     args = ap.parse_args()
 
     names = [n for n in sorted(INPUTS) if n not in ("critters.rev",)]
@@ -242,6 +244,11 @@ def main() -> int:
     reached = oracle.executed()
     check = full_suite if args.full else oracle.check
 
+    print(
+        "oracle: "
+        + ("the whole test suite" if args.full
+           else f"{len(names)} example programs, run both ways")
+    )
     classes = [
         cls
         for cls in isa.INSTRUCTIONS.values()
@@ -288,6 +295,17 @@ def main() -> int:
         f"{killed} caught, {survived} survived, {skipped} instructions not "
         f"exercised — {score:.1f}% in {time.time() - started:.1f}s"
     )
+    if not args.full and survived:
+        print(
+            "note: the fast oracle cannot reach assertions that only fire on\n"
+            "      states a valid program never reaches.  `--full` uses the\n"
+            "      whole test suite, which does."
+        )
+    if args.min:
+        if score < args.min:
+            print(f"\nmutation score {score:.1f}% is below the required {args.min:.1f}%")
+            return 1
+        return 0
     return 1 if survived else 0
 
 
