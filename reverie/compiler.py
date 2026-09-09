@@ -230,7 +230,7 @@ class Compiler:
         for free in plan.free:
             args.append(self.base_addr(free.origin))
         for sym in plan.ctemps:
-            args.append(LocalA(sym.off, sym.name))
+            args.append(LocalA(sym.off, sym.name, max(sym.length, 1)))
         out.append(rir.RCall(plan.proc_name, args, False, s.span))
         for binding, cell in zip(s.bindings, plan.outputs):
             out.append(
