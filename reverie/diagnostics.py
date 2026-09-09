@@ -132,16 +132,22 @@ class ReverieError(Exception):
             out.append(f"{blue}{pad} |{off}")
             for ln in range(line, min(end_line, line + 4) + 1):
                 text = src.line_text(ln)
-                out.append(f"{blue}{str(ln).rjust(gutter)} |{off} {text}")
                 if ln == line:
                     width = (
                         max(1, self.span.end - self.span.start)
                         if end_line == line
                         else max(1, len(text) - col + 1)
                     )
-                    caret = " " * (col - 1) + "^" * width
+                    text, shown_col, width = _window(text, col, width)
+                    out.append(f"{blue}{str(ln).rjust(gutter)} |{off} {text}")
+                    caret = " " * (shown_col - 1) + "^" * width
                     tail = f" {self.label}" if self.label else ""
                     out.append(f"{blue}{pad} |{off} {red}{caret}{tail}{off}")
+                else:
+                    out.append(
+                        f"{blue}{str(ln).rjust(gutter)} |{off} "
+                        f"{_window(text, 1, 1)[0]}"
+                    )
             if end_line > line + 4:
                 out.append(f"{blue}{pad} |{off} ...")
             out.append(f"{blue}{pad} |{off}")
@@ -153,6 +159,33 @@ class ReverieError(Exception):
         if self.span is not None:
             return f"{self.span.location()}: {self.message}"
         return self.message
+
+
+#: how much of a source line to show around the caret
+LINE_WINDOW = 100
+
+
+def _window(text: str, col: int, width: int) -> tuple[str, int, int]:
+    """Trim a long source line to a window around the caret.
+
+    Generated or minified sources can put a whole program on one line, and a
+    diagnostic that echoes half a megabyte of it is not a diagnostic.
+    """
+    if len(text) <= LINE_WINDOW:
+        return text, col, min(width, max(1, len(text) - col + 1))
+    half = LINE_WINDOW // 2
+    start = max(0, col - 1 - half)
+    end = min(len(text), start + LINE_WINDOW)
+    start = max(0, end - LINE_WINDOW)
+    piece = text[start:end]
+    shown_col = col - start
+    if start > 0:
+        piece = "..." + piece
+        shown_col += 3
+    if end < len(text):
+        piece = piece + "..."
+    width = max(1, min(width, len(piece) - shown_col + 1))
+    return piece, max(1, shown_col), width
 
 
 class LexError(ReverieError):

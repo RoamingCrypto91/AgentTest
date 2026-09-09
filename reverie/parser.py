@@ -46,6 +46,15 @@ PRECEDENCE = [
     ("*", "/", "%"),
 ]
 
+#: operator -> its level, so the parser climbs precedence in a loop rather
+#: than one stack frame per level
+LEVEL_OF = {op: i for i, ops in enumerate(PRECEDENCE) for op in ops}
+
+#: how deeply expressions and blocks may nest.  Without a limit, input like
+#: two thousand open parentheses exhausts the interpreter's stack and the user
+#: gets a Python traceback instead of a diagnostic.
+MAX_DEPTH = 128
+
 RIGHT_ASSOC = {"**"}
 
 UPDATE_OPS = {
@@ -75,6 +84,8 @@ class Parser:
         self.source = source
         self.tokens = tokenize(source)
         self.pos = 0
+        self.depth = 0
+        self.edepth = 0
 
     # -- token plumbing ---------------------------------------------------
     @property
@@ -121,6 +132,28 @@ class Parser:
         if self.tok.kind != TOK_IDENT:
             self.fail(f"expected an identifier" + (f" {why}" if why else ""))
         return self.advance()
+
+    def deeper(self, what: str) -> None:
+        self.depth += 1
+        if self.depth > MAX_DEPTH:
+            self.depth = 0
+            raise ParseError(
+                f"{what} nests more than {MAX_DEPTH} deep",
+                self.tok.span,
+                notes=["break it into smaller pieces"],
+            )
+
+    def deeper_expr(self) -> bool:
+        """Enter an expression; True if this is the outermost one."""
+        self.edepth += 1
+        if self.edepth > MAX_DEPTH:
+            self.edepth = 0
+            raise ParseError(
+                f"this expression nests more than {MAX_DEPTH} deep",
+                self.tok.span,
+                notes=["break it into smaller pieces"],
+            )
+        return self.edepth == 1
 
     def fail(self, message: str, notes: Sequence[str] = ()) -> None:
         found = self.tok
@@ -211,6 +244,13 @@ class Parser:
 
     # -- statements -------------------------------------------------------
     def parse_block(self) -> ast.Block:
+        self.deeper("this block")
+        try:
+            return self._parse_block()
+        finally:
+            self.depth -= 1
+
+    def _parse_block(self) -> ast.Block:
         start = self.expect_op("{", "to open a block")
         stmts: list[ast.Stmt] = []
         while not self.at_op("}"):
@@ -385,6 +425,13 @@ class Parser:
 
     # -- classical statements --------------------------------------------
     def parse_cblock(self) -> ast.CBlock:
+        self.deeper("this block")
+        try:
+            return self._parse_cblock()
+        finally:
+            self.depth -= 1
+
+    def _parse_cblock(self) -> ast.CBlock:
         start = self.expect_op("{", "to open a classical block")
         stmts: list[ast.CStmt] = []
         while not self.at_op("}"):
@@ -484,15 +531,33 @@ class Parser:
         return ast.Var(self.span_from(start), name)
 
     def parse_expr(self, level: int = 0) -> ast.Expr:
-        if level >= len(PRECEDENCE):
-            return self.parse_power()
-        start = self.tok
-        left = self.parse_expr(level + 1)
-        while self.tok.kind == TOK_OP and self.tok.text in PRECEDENCE[level]:
-            op = self.advance().text
-            right = self.parse_expr(level + 1)
-            left = ast.BinOp(self.span_from(start), op, left, right)
-        return left
+        """Precedence climbing.
+
+        One frame per *operator*, not one per precedence level, so a nested
+        expression costs a handful of stack frames rather than a dozen.
+        """
+        outermost = self.deeper_expr()
+        try:
+            start = self.tok
+            left = self.parse_power()
+            while self.tok.kind == TOK_OP:
+                op_level = LEVEL_OF.get(self.tok.text)
+                if op_level is None or op_level < level:
+                    break
+                op = self.advance().text
+                right = self.parse_expr(op_level + 1)
+                left = ast.BinOp(self.span_from(start), op, left, right)
+            if outermost and ast.expr_depth(left) > MAX_DEPTH:
+                # a long left-associative chain is as deep as it is long, so
+                # counting parser recursion is not enough -- measure the tree
+                raise ParseError(
+                    f"this expression nests more than {MAX_DEPTH} deep",
+                    self.span_from(start),
+                    notes=["break it into smaller pieces"],
+                )
+            return left
+        finally:
+            self.edepth -= 1
 
     def parse_power(self) -> ast.Expr:
         start = self.tok
@@ -505,13 +570,17 @@ class Parser:
 
     def parse_unary(self) -> ast.Expr:
         start = self.tok
-        if self.at_op("-", "!", "~", "+"):
+        if not self.at_op("-", "!", "~", "+"):
+            return self.parse_primary()
+        self.deeper_expr()
+        try:
             op = self.advance().text
             operand = self.parse_unary()
             if op == "+":
                 return operand
             return ast.UnOp(self.span_from(start), op, operand)
-        return self.parse_primary()
+        finally:
+            self.edepth -= 1
 
     def parse_primary(self) -> ast.Expr:
         start = self.tok

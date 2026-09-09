@@ -28,6 +28,18 @@ The pieces:
     Stepping backwards through a running program.
 """
 
+import sys as _sys
+
+#: Reverie integers are arbitrary precision, but CPython caps how many digits
+#: an int/str conversion may involve (4300 by default) as a denial-of-service
+#: guard.  Without lifting it, a legal program that computes a large number
+#: turns into a Python error the moment it is printed.  The cap is raised, not
+#: removed: an absurd literal still gets a diagnostic rather than a hang.
+_DIGIT_LIMIT = 200_000
+if hasattr(_sys, "set_int_max_str_digits"):
+    if _sys.get_int_max_str_digits() < _DIGIT_LIMIT:
+        _sys.set_int_max_str_digits(_DIGIT_LIMIT)
+
 from .diagnostics import (  # noqa: F401
     CheckError,
     CompileError,

@@ -381,6 +381,37 @@ def expressions(node) -> list[Expr]:
     return out
 
 
+def expr_depth(e: Optional[Expr]) -> int:
+    """How deeply an expression tree nests, computed without recursion.
+
+    A long left-associative chain like ``1 + 1 + ... + 1`` is as deep as it is
+    long, so the parser has to measure the tree it built rather than count how
+    deep it went to build it.
+    """
+    if e is None:
+        return 0
+    best = 0
+    stack = [(e, 1)]
+    while stack:
+        node, d = stack.pop()
+        if d > best:
+            best = d
+        if isinstance(node, BinOp):
+            for child in (node.left, node.right):
+                if child is not None:
+                    stack.append((child, d + 1))
+        elif isinstance(node, UnOp):
+            if node.operand is not None:
+                stack.append((node.operand, d + 1))
+        elif isinstance(node, Builtin):
+            for child in node.args:
+                stack.append((child, d + 1))
+        elif isinstance(node, Index):
+            if node.index is not None:
+                stack.append((node.index, d + 1))
+    return best
+
+
 def subexpressions(e: Optional[Expr]) -> list[Expr]:
     """Every node in an expression tree, including *e* itself."""
     if e is None:

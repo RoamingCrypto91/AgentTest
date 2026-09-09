@@ -477,8 +477,17 @@ class Emit(Instr):
         for p in self.parts:
             if isinstance(p, str):
                 out.append(p)
-            else:
-                out.append(str(p.eval(m)))
+                continue
+            value = p.eval(m)
+            try:
+                out.append(str(value))
+            except ValueError:  # the interpreter's digit cap
+                raise RuntimeFault(
+                    "the value is too large to print",
+                    pc=self.at,
+                    notes=["it has more digits than this interpreter will "
+                           "convert to text"],
+                )
         return "".join(out)
 
     def _produce(self, m) -> None:

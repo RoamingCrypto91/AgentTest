@@ -188,7 +188,13 @@ def tokenize(source: Source) -> list[Token]:
                     raise LexError("numeric literal has no digits", span(i, j))
                 try:
                     value = int(digits, base)
-                except ValueError:
+                except ValueError as exc:
+                    if "Exceeds the limit" in str(exc):
+                        raise LexError(
+                            f"numeric literal has {len(digits)} digits, which "
+                            f"is more than this interpreter will convert",
+                            span(i, j),
+                        )
                     raise LexError(
                         f"invalid base-{base} literal {text[i:j]!r}", span(i, j)
                     )
@@ -199,7 +205,17 @@ def tokenize(source: Source) -> list[Token]:
                     raise LexError(
                         f"invalid numeric literal {text[i:j + 1]!r}", span(i, j + 1)
                     )
-                value = int(text[i:j].replace("_", ""))
+                digits = text[i:j].replace("_", "")
+                try:
+                    value = int(digits)
+                except ValueError:
+                    raise LexError(
+                        f"numeric literal has {len(digits)} digits, which is "
+                        f"more than this interpreter will convert",
+                        span(i, j),
+                        notes=["Reverie integers are unbounded, but a literal "
+                               "this long is almost certainly a mistake"],
+                    )
             out.append(Token(TOK_INT, text[i:j], span(i, j), value))
             i = j
             continue
