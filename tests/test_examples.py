@@ -44,6 +44,7 @@ INPUTS = {
     "primes.rev": {},
     "hanoi.rev": {},
     "critters.rev": {},
+    "turing.rev": {},
 }
 
 
@@ -203,6 +204,18 @@ def test_tour_computes_an_integer_square_root():
 def test_first_doubles():
     forward, _, _ = _run_example("first.rev")
     eq(forward["total"], 42)
+
+
+def test_turing_counts_up_and_back_down():
+    forward, output, _ = _run_example("turing.rev")
+    eq(forward["tape"], [0] * 6)
+    eq(forward["trail"], [])
+    eq(forward["lengths"], [])
+    eq(forward["state"], 0)
+    values = [int(l.split("=")[1]) for l in output if "=" in l]
+    eq(values, list(range(13)) + list(range(12, -1, -1)))
+    contains("\n".join(output), "44 rule numbers")
+    contains(output[-1], "empty again: 0")
 
 
 def test_countdown_sums():

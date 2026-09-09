@@ -188,6 +188,7 @@ No dependencies. Python 3.11 and the standard library, tests included.
 | `sorting.rev` | sorting is not injective, so the permutation has to be kept |
 | `cipher.rev` | a Feistel network; decryption is `uncall` |
 | `critters.rev` | a reversible cellular automaton, evolved and un-evolved |
+| `turing.rev` | a Turing machine, and the history that lets it be unrun |
 | `hanoi.rev` | reversible recursion over three stacks |
 | `embedding.rev` | destructive code made reversible and garbage-free |
 | `primes.rev` | compute–copy–uncompute written out by hand |

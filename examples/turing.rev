@@ -1,0 +1,130 @@
+// A Turing machine, simulated by a machine that runs backwards.
+//
+//   rev run examples/turing.rev
+//
+// The simulated machine is an ordinary binary incrementer: three states, a
+// tape of bits, a head. Nothing about it is reversible — from a configuration
+// alone you cannot tell which rule produced it, which is exactly the
+// information a conventional simulator throws away on every step.
+//
+// So this one keeps it. Each step pushes the number of the rule it applied
+// onto `trail`, and that stack is the computation history in Bennett's sense:
+// the difference between a machine you can run and one you can also unrun.
+// `uncall increment` reads the rules back off it and the tape counts down.
+
+const WIDTH  = 6;
+const ROUNDS = 12;
+
+int tape[WIDTH];
+int head;
+int state;
+
+stack trail;    // one rule number per simulated step
+stack lengths;  // how many steps each increment took
+
+/// One step of the simulated machine.
+///
+/// state 0 — add one, carrying: a 0 becomes 1 and we are done; a 1 becomes 0
+///           and the carry moves left (up the tape).
+/// state 1 — rewind the head to the start.
+/// state 2 — halted.
+///
+/// The four rules are numbered 1..4, and the number is what gets recorded.
+proc tm_step(int cells[], int at, int st, stack log) {
+    local int rule = 0;
+    if st == 0 {
+        if cells[at] == 0 {
+            cells[at] += 1;
+            st += 1;
+            rule += 1;
+        } else {
+            cells[at] -= 1;
+            at += 1;
+            rule += 2;
+        } fi rule == 1;
+    } else {
+        if at > 0 {
+            at -= 1;
+            rule += 3;
+        } else {
+            st += 1;
+            rule += 4;
+        } fi rule == 3;
+    } fi rule < 3;
+    push(rule, log);
+    delocal int rule = 0;
+}
+
+/// Run the simulated machine until it halts, then rearm it.
+proc increment(int cells[], int at, int st, stack log, stack sizes) {
+    local int n = 0;
+    from n == 0 do {
+        skip;
+    } loop {
+        call tm_step(cells, at, st, log);
+        n += 1;
+    } until st == 2;
+    st -= 2;
+    push(n, sizes);
+    delocal int n = 0;
+}
+
+/// acc += the number written on the tape, least significant bit first.
+proc value_of(int cells[], int acc) {
+    embed (acc += v) {
+        var v = 0;
+        var k = len(cells) - 1;
+        while (k >= 0) {
+            v = v * 2 + cells[k];
+            k = k - 1;
+        }
+    }
+}
+
+proc show(int cells[], int v) {
+    write "  ";
+    local int i = 0;
+    from i == 0 do {
+        write cells[len(cells) - 1 - i];
+    } loop {
+        i += 1;
+    } until i == len(cells) - 1;
+    delocal int i = len(cells) - 1;
+    print "  = ", v;
+}
+
+/// Print the tape as bits and as a number, without keeping anything.
+proc report(int cells[]) {
+    local int v = 0;
+    call value_of(cells, v);
+    call show(cells, v);
+    uncall value_of(cells, v);
+    delocal int v = 0;
+}
+
+proc main() {
+    print "counting up:";
+    local int r = 0;
+    from r == 0 do {
+        call report(tape);
+    } loop {
+        r += 1;
+        call increment(tape, head, state, trail, lengths);
+    } until r == ROUNDS;
+    delocal int r = ROUNDS;
+
+    print "the history holds ", size(trail), " rule numbers";
+    print "";
+    print "counting down -- the same machine, unrun:";
+
+    local int q = 0;
+    from q == 0 do {
+        call report(tape);
+    } loop {
+        q += 1;
+        uncall increment(tape, head, state, trail, lengths);
+    } until q == ROUNDS;
+    delocal int q = ROUNDS;
+
+    print "the history is empty again: ", size(trail);
+}
