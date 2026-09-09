@@ -62,6 +62,30 @@ def test_forward_then_backward_is_the_identity(seed_list):
         eq(m.position, 0, f"seed {seed}: reversal length differs from {steps}")
 
 
+@case(seeds(50, 3000))
+def test_reversing_costs_the_same_as_running(seed_list):
+    """Undoing a program executes exactly as many instructions as doing it.
+
+    This is the structural form of the claim the benchmark measures in
+    wall-clock terms: there is no log to write on the way out and none to read
+    on the way back, so the two directions do the same amount of work.
+    """
+    for seed in seed_list:
+        src = generate(seed)
+        prog = build(src, f"gen{seed}.rev")
+        m = fresh(prog)
+        m.start_forward().run()
+        # `forward_steps` counts *execution* direction, so an `uncall` inside a
+        # forward run lands in the backward column.  Reversing the program
+        # swaps the two columns exactly.
+        ran, unran = m.stats.forward_steps, m.stats.backward_steps
+        total = m.stats.steps
+        m.start_backward().run()
+        eq(m.stats.steps, 2 * total, f"seed {seed}: the reversal is a different length")
+        eq(m.stats.forward_steps - ran, unran, f"seed {seed}: directions did not swap")
+        eq(m.stats.backward_steps - unran, ran, f"seed {seed}: directions did not swap")
+
+
 @case(seeds(60, 5000))
 def test_source_inversion_undoes_the_program(seed_list):
     """`rev invert` produces a program that really is the inverse."""

@@ -57,6 +57,8 @@ class Symbol:
     stack_id: int = 0
     #: for `cparam` symbols: the enclosing symbol this one stands in for
     origin: Optional["Symbol"] = None
+    #: set when the declaration itself was rejected, to stop the cascade
+    bad: bool = False
 
     @property
     def is_array(self) -> bool:
@@ -541,11 +543,16 @@ class Analyzer:
         if isinstance(s.type, ast.TStack):
             self.error("local stacks are not supported", s.span,
                        notes=["declare stacks at module scope"])
-            return None
+            sym = Symbol(s.name, "local", "int", 1, off=self.alloc(1), span=s.span,
+                         bad=True)
+            self.scope.declare(sym)
+            self.a.uses[id(s)] = sym
+            return sym
         if isinstance(s.type, ast.TArray):
             mark = self.quiet()
             n = self.const_eval(s.type.size, "a local array length")
-            if n <= 0:
+            bad = n <= 0
+            if bad:
                 if self.clean_since(mark):
                     self.error(
                         f"local array `{s.name}` needs a positive length", s.span
@@ -555,7 +562,8 @@ class Analyzer:
             if s.expr is not None:
                 self.error("local arrays are created zeroed and take no initialiser",
                            s.span)
-            sym = Symbol(s.name, "local", "array", n, off=self.alloc(n), span=s.span)
+            sym = Symbol(s.name, "local", "array", n, off=self.alloc(n), span=s.span,
+                         bad=bad)
         else:
             if s.expr is None:
                 self.error(
@@ -603,10 +611,15 @@ class Analyzer:
         want_array = isinstance(s.type, ast.TArray)
         if want_array != sym.is_array:
             self.error(f"`delocal {s.name}` does not match its declaration", s.span)
+            # release it anyway, so the block does not also report a leak
+            opened.pop()
+            self.scope.names.pop(sym.name, None)
+            self.next_off -= sym.length
             return
         if sym.is_array:
+            mark = self.quiet()
             n = self.const_eval(s.type.size, "a local array length")
-            if n != sym.length:
+            if n != sym.length and self.clean_since(mark) and not sym.bad:
                 self.error(
                     f"`delocal {s.name}` has length {n}, declared as {sym.length}",
                     s.span,
@@ -614,6 +627,11 @@ class Analyzer:
             s.type.length = sym.length
         else:
             if s.expr is None:
+                if sym.bad:
+                    opened.pop()
+                    self.scope.names.pop(sym.name, None)
+                    self.next_off -= sym.length
+                    return
                 self.error(
                     f"`delocal {s.name}` needs an expression reproducing its value",
                     s.span,
@@ -655,8 +673,9 @@ class Analyzer:
             self.analyze_block(s.body)
             self.analyze_block(s.step)
             return
-        if isinstance(s, ast.LocalDecl):
-            # a local/delocal outside of a block context
+        if isinstance(s, ast.LocalDecl):  # pragma: no cover - the parser only
+            # produces locals inside blocks; this is here so a future syntax
+            # cannot smuggle one into a bare statement position
             self.error(
                 f"`{'delocal' if s.release else 'local'} {s.name}` must appear "
                 f"directly inside a block",
@@ -899,8 +918,18 @@ class Analyzer:
         return True
 
     def analyze_stack_op(self, s: ast.StackOp) -> None:
+        same = (
+            isinstance(s.var, ast.Var)
+            and isinstance(s.stack, ast.Var)
+            and s.var.name == s.stack.name
+        )
         sym = self.analyze_lvalue(s.var, "a push/pop target")
-        if sym is not None and sym.type != "int" and not isinstance(s.var, ast.Index):
+        if (
+            sym is not None
+            and sym.type != "int"
+            and not isinstance(s.var, ast.Index)
+            and not same
+        ):
             self.error(f"`{sym.name}` is not an integer cell", s.span)
         if not isinstance(s.stack, ast.Var):
             self.error("the second argument of push/pop must be a stack name",

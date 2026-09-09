@@ -217,9 +217,22 @@ composition is the identity, so errors that cancel survive it. Three did — see
 `docs/DESIGN.md`.
 
 ```console
-$ python3 tests/run_tests.py                 # 440 cases
+$ python3 tests/run_tests.py                 # 636 cases
 $ python3 tests/run_tests.py --slow --repeat 8   # several thousand generated programs
 $ python3 tests/run_tests.py --seed 1234     # reproduce a fuzz failure
+$ python3 tools/coverage.py                  # 96% of reverie/, no dependencies
+$ python3 tools/bench.py                     # and what it costs
+```
+
+Reversal is not a slow path. About 1.4 million instructions a second in
+CPython, with backward execution within noise of forward — there is no log to
+write on the way out and none to read on the way back:
+
+```
+case                             steps    forward   backward   bwd/fwd
+straight-line updates          160,007     112.4ms     102.8ms      0.91
+call / uncall                  144,021     143.3ms     144.1ms      1.01
+embed, tape-heavy              120,019      77.2ms      78.2ms      1.01
 ```
 
 ---
@@ -244,7 +257,8 @@ reverie/
   cli.py                                 rev
 stdlib/    array, math, bits, sort
 examples/  eleven programs
-tests/     a dependency-free runner, a program generator, 440 cases
+tests/     a dependency-free runner, a program generator, 636 cases
+tools/     coverage, benchmarks, and the page builder
 ```
 
 ## Prior art

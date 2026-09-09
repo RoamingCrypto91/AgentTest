@@ -373,3 +373,156 @@ def test_embed_free_variables_become_parameters():
                 "proc main() { local int t = 0; call f(t); delocal int t = 0; }")
     plan = list(a.plans.values())[0]
     eq([f.name for f in plan.free], ["p"])
+
+
+# ---------------------------------------------------------------------------
+# compile-time constants
+# ---------------------------------------------------------------------------
+
+
+@case("const A = 2 + 3 * 4;", 14)
+@case("const A = -5;", -5)
+@case("const A = !0;", 1)
+@case("const A = ~3;", -4)
+@case("const A = min(3, 9) + max(3, 9);", 12)
+@case("const A = abs(-7) + sign(-7);", 6)
+@case("const A = 1 && 0;", 0)
+@case("const A = 1 || 0;", 1)
+@case("const A = 0 && 1;", 0)
+@case("const A = 0 || 0;", 0)
+@case("const A = 7 / 2;", 3)
+@case("const A = 7 % 2;", 1)
+@case("const B = 3; const A = B * 2;", 6)
+def test_constant_expressions(decl, value):
+    a = accepts(f"{decl} proc main() {{ skip; }}")
+    eq(a.consts["A"], value)
+
+
+def test_division_by_zero_in_a_constant():
+    err = only_error("const A = 1 / 0; proc main() { skip; }")
+    contains(err.message, "division by zero in a constant")
+
+
+def test_a_constant_cannot_depend_on_an_array():
+    err = only_error("int xs[3]; const A = xs; proc main() { skip; }")
+    contains(err.message, "cannot depend on the array")
+
+
+def test_len_of_a_constant_sized_array_is_constant():
+    a = accepts("int xs[4]; const A = len(xs); proc main() { skip; }")
+    eq(a.consts["A"], 4)
+
+
+def test_len_of_an_open_parameter_is_not_constant():
+    errs = errors(
+        "proc f(int xs[]) { local int a[len(xs)]; delocal int a[len(xs)]; } "
+        "int ys[2]; proc main() { call f(ys); }"
+    )
+    contains(errs[0], "not known at compile time")
+
+
+def test_len_of_something_that_is_not_an_array():
+    err = only_error("int x; const A = len(x); proc main() { skip; }")
+    contains(err.message, "`len` needs an array name")
+
+
+def test_a_call_is_not_a_constant_expression():
+    errs = errors("int x; const A = empty(x); proc main() { skip; }")
+    is_true(any("constant" in e or "stack" in e for e in errs), errs)
+
+
+def test_a_constant_declared_twice():
+    contains(only_error("const A = 1; const A = 2; proc main() { skip; }").message,
+             "declared twice")
+
+
+def test_generated_names_are_reserved():
+    err = only_error("proc __embed_1() { skip; } proc main() { skip; }")
+    contains(err.message, "collides with a compiler-generated name")
+
+
+def test_duplicate_parameters():
+    err = check("int x; int y; proc f(int a, int a) { a += 1; } "
+                "proc main() { call f(x, y); }").diagnostics.errors[0]
+    contains(err.message, "duplicate parameter")
+
+
+def test_local_stacks_are_not_supported():
+    err = only_error("proc main() { local stack s; delocal stack s; }")
+    contains(err.message, "local stacks are not supported")
+
+
+def test_a_local_array_needs_a_positive_length():
+    err = only_error("proc main() { local int a[0]; delocal int a[0]; }")
+    contains(err.message, "needs a positive length")
+
+
+def test_a_local_array_length_must_match_its_release():
+    err = only_error("proc main() { local int a[3]; delocal int a[4]; }")
+    contains(err.message, "has length 4, declared as 3")
+
+
+def test_releasing_a_local_as_the_wrong_kind():
+    err = only_error("proc main() { local int a[3]; delocal int a = 1; }")
+    contains(err.message, "does not match its declaration")
+
+
+def test_locals_closed_out_of_order_report_once():
+    errs = errors(
+        "int x; proc main() { local int a = 1; local int b = 2; local int c = 3; "
+        "x += a + b + c; delocal int a = 1; delocal int c = 3; delocal int b = 2; }"
+    )
+    eq(len(errs), 1, errs)
+    contains(errs[0], "expected `delocal c`")
+
+
+def test_a_stack_cannot_be_pushed_onto_itself():
+    err = only_error("stack s; proc main() { push(s, s); }")
+    contains(err.message, "onto itself")
+
+
+def test_push_needs_a_stack_name():
+    errs = errors("int x; proc main() { push(x, x + 1); }")
+    is_true(any("stack name" in e for e in errs), errs)
+
+
+def test_embed_outputs_must_be_cells():
+    err = only_error("stack s; proc main() { embed (s ^= a) { var a = 1; } }")
+    contains(err.message, "must be integer cells")
+
+
+def test_embed_blocks_may_not_nest():
+    errs = errors(
+        "int x; proc main() { embed (x ^= a) { var a = 1; } }"
+    )
+    eq(errs, [])
+
+
+def test_classical_arrays_need_a_positive_length():
+    err = only_error("int x; proc main() { embed (x ^= a[0]) { var a[0]; } }")
+    contains(err.message, "needs a positive length")
+
+
+def test_classical_code_reports_unknown_names():
+    err = only_error("int x; proc main() { embed (x ^= a) { var a = nope; } }")
+    contains(err.message, "unknown name `nope` in an embed block")
+
+
+def test_classical_stack_queries_must_name_a_stack():
+    err = only_error("int x; int y; proc main() { embed (x ^= a) { var a = size(y); } }")
+    contains(err.message, "not a stack")
+
+
+def test_classical_arrays_are_indexed():
+    contains(
+        only_error(
+            "int x; proc main() { embed (x ^= a[0]) { var a[2]; a = 1; } }"
+        ).message,
+        "assign to an element",
+    )
+    contains(
+        only_error(
+            "int x; proc main() { embed (x ^= b) { var b = 1; b[0] = 2; } }"
+        ).message,
+        "not an array",
+    )

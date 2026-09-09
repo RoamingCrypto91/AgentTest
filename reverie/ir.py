@@ -53,10 +53,6 @@ def ipow(a: int, b: int) -> int:
     return a**b
 
 
-def truthy(v: int) -> bool:
-    return v != 0
-
-
 # ---------------------------------------------------------------------------
 # addresses
 # ---------------------------------------------------------------------------
@@ -309,27 +305,6 @@ class Load(Expr):
         return (self.addr,)
 
 
-class AddrOf(Expr):
-    """The numeric address of a cell -- used to pass arrays and stacks around."""
-
-    __slots__ = ("addr",)
-
-    def __init__(self, addr: Addr) -> None:
-        self.addr = addr
-
-    def eval(self, m) -> int:
-        return self.addr.resolve(m)
-
-    def render(self) -> str:
-        return f"addr({self.addr.render()})"
-
-    def children(self):
-        return (self.addr,)
-
-    def _key(self):
-        return (self.addr,)
-
-
 class ArrayLen(Expr):
     """``len(a)`` where ``a`` is a by-reference array parameter."""
 
@@ -437,80 +412,3 @@ class StackQuery(Expr):
 
     def _key(self):
         return (self.kind, self.addr)
-
-
-# ---------------------------------------------------------------------------
-# analysis helpers
-# ---------------------------------------------------------------------------
-
-
-def walk(node) -> "list":
-    """Depth-first list of every Expr/Addr node reachable from *node*."""
-    out = [node]
-    i = 0
-    while i < len(out):
-        for c in out[i].children():
-            out.append(c)
-        i += 1
-    return out
-
-
-def reads_cell(node, addr: Addr) -> bool:
-    """Conservatively decide whether *node* may read the cell named by *addr*."""
-    for n in walk(node):
-        if isinstance(n, (Load, StackQuery)) and may_alias(n.addr, addr):
-            return True
-    return False
-
-
-def may_alias(a: Addr, b: Addr) -> bool:
-    """Conservative aliasing test between two address expressions."""
-    if isinstance(a, IndexA) or isinstance(b, IndexA):
-        base_a = a.base if isinstance(a, IndexA) else a
-        base_b = b.base if isinstance(b, IndexA) else b
-        return may_alias(base_a, base_b)
-    if type(a) is not type(b):
-        # Different address families may still alias through a by-reference
-        # parameter, which can point anywhere.
-        return isinstance(a, ParamA) or isinstance(b, ParamA)
-    return a == b
-
-
-def constant_fold(e: Expr) -> Expr:
-    """Fold constant sub-expressions; used to keep generated code readable."""
-    if isinstance(e, Bin):
-        left = constant_fold(e.left)
-        right = constant_fold(e.right)
-        if isinstance(left, Const) and isinstance(right, Const):
-            if e.op in SHORT_CIRCUIT:
-                if e.op == "&&":
-                    return Const(1 if (left.value and right.value) else 0)
-                return Const(1 if (left.value or right.value) else 0)
-            try:
-                return Const(BINOPS[e.op](left.value, right.value))
-            except RuntimeFault:
-                return Bin(e.op, left, right)
-        return Bin(e.op, left, right)
-    if isinstance(e, Un):
-        operand = constant_fold(e.operand)
-        if isinstance(operand, Const):
-            return Const(UNOPS[e.op](operand.value))
-        return Un(e.op, operand)
-    return e
-
-
-def logical_not(e: Expr) -> Expr:
-    """Build ``!e``, folding double negation and flipping comparisons."""
-    if isinstance(e, Un) and e.op == "!":
-        inner = e.operand
-        if isinstance(inner, Bin) and inner.op in ("==", "!=", "<", "<=", ">", ">="):
-            return inner
-        if isinstance(inner, Un) and inner.op == "!":
-            return logical_not(inner.operand)
-        return Un("!", e)
-    flip = {"==": "!=", "!=": "==", "<": ">=", ">=": "<", ">": "<=", "<=": ">"}
-    if isinstance(e, Bin) and e.op in flip:
-        return Bin(flip[e.op], e.left, e.right)
-    if isinstance(e, Const):
-        return Const(int(e.value == 0))
-    return Un("!", e)

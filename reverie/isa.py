@@ -76,9 +76,6 @@ class Instr:
     def __repr__(self) -> str:
         return f"<{self.at}: {self.render()}>"
 
-    #: addresses/expressions referenced, for analysis and the visualizer
-    def refs(self) -> Sequence[Addr | Expr]:
-        return ()
 
 
 class Nop(Instr):
@@ -196,8 +193,6 @@ class Update(Instr):
     def operands(self) -> str:
         return f"{self.addr.render()} {self.op}= {self.expr.render()}"
 
-    def refs(self):
-        return (self.addr, self.expr)
 
 
 #: in-place unary operators, each its own inverse
@@ -230,8 +225,6 @@ class UnaryUpdate(Instr):
     def operands(self) -> str:
         return f"{self.op} {self.addr.render()}"
 
-    def refs(self):
-        return (self.addr,)
 
 
 def _unary_backward(self, m) -> None:
@@ -270,8 +263,6 @@ class Swap(Instr):
     def operands(self) -> str:
         return f"{self.a.render()} <=> {self.b.render()}"
 
-    def refs(self):
-        return (self.a, self.b)
 
 
 class Assert(Instr):
@@ -302,8 +293,6 @@ class Assert(Instr):
     def operands(self) -> str:
         return self.expr.render()
 
-    def refs(self):
-        return (self.expr,)
 
 
 # ---------------------------------------------------------------------------
@@ -379,8 +368,6 @@ class LocalAlloc(Instr):
             return f"%{self.off}[{self.size}]"
         return f"%{self.off} = {self.expr.render()}"
 
-    def refs(self):
-        return (self.expr,) if self.expr is not None else ()
 
 
 class LocalFree(LocalAlloc):
@@ -442,8 +429,6 @@ class StackPush(Instr):
     def operands(self) -> str:
         return f"{self.var.render()}, {self.stack.render()}"
 
-    def refs(self):
-        return (self.var, self.stack)
 
 
 class StackPop(StackPush):
@@ -507,13 +492,15 @@ class Emit(Instr):
     def _consume(self, m) -> None:
         expect = self._text(m)
         if self.newline:
-            if not m.output:
-                raise RuntimeFault(
-                    "cannot un-print: the output log is empty", pc=self.at
-                )
+            # Report the open line first: it is the more specific complaint,
+            # and both are true when nothing has been printed yet.
             if m.line:
                 raise RuntimeFault(
                     "cannot un-print: a partial line is still open", pc=self.at
+                )
+            if not m.output:
+                raise RuntimeFault(
+                    "cannot un-print: the output log is empty", pc=self.at
                 )
             got = m.output.pop()
             if not got.endswith(expect):
@@ -546,8 +533,6 @@ class Emit(Instr):
             bits.append(repr(p) if isinstance(p, str) else p.render())
         return ("" if self.newline else "-nl ") + ", ".join(bits)
 
-    def refs(self):
-        return tuple(p for p in self.parts if not isinstance(p, str))
 
 
 class Unemit(Emit):
@@ -599,8 +584,6 @@ class If(Instr):
     def operands(self) -> str:
         return f"{self.cond.render()} else->{self.else_begin} fi->{self.fi}"
 
-    def refs(self):
-        return (self.cond,)
 
 
 class ElseEnd(Instr):
@@ -636,8 +619,6 @@ class ElseEnd(Instr):
     def operands(self) -> str:
         return f"{self.exit_cond.render()} fi->{self.fi}"
 
-    def refs(self):
-        return (self.exit_cond,)
 
 
 class ElseBegin(Instr):
@@ -666,8 +647,6 @@ class ElseBegin(Instr):
     def operands(self) -> str:
         return f"{self.cond.render()} if->{self.if_at}"
 
-    def refs(self):
-        return (self.cond,)
 
 
 class Fi(Instr):
@@ -698,8 +677,6 @@ class Fi(Instr):
     def operands(self) -> str:
         return f"{self.exit_cond.render()} then_end->{self.then_end} else_end->{self.else_end}"
 
-    def refs(self):
-        return (self.exit_cond,)
 
 
 # ---------------------------------------------------------------------------
@@ -733,8 +710,6 @@ class From(Instr):
     def operands(self) -> str:
         return f"{self.entry_cond.render()} until->{self.until} repeat->{self.repeat}"
 
-    def refs(self):
-        return (self.entry_cond,)
 
 
 class Until(Instr):
@@ -762,8 +737,6 @@ class Until(Instr):
     def operands(self) -> str:
         return f"{self.exit_cond.render()} from->{self.from_at} repeat->{self.repeat}"
 
-    def refs(self):
-        return (self.exit_cond,)
 
 
 class Repeat(Instr):
@@ -804,8 +777,6 @@ class Repeat(Instr):
             f"from->{self.from_at} until->{self.until}"
         )
 
-    def refs(self):
-        return (self.entry_cond, self.exit_cond)
 
 
 # ---------------------------------------------------------------------------
@@ -872,8 +843,6 @@ class Call(Instr):
     def render(self) -> str:
         return self.operands()
 
-    def refs(self):
-        return tuple(self.args)
 
 
 class ProcEntry(Instr):
@@ -963,8 +932,6 @@ class CSet(Instr):
     def operands(self) -> str:
         return f"{self.addr.render()} = {self.expr.render()}"
 
-    def refs(self):
-        return (self.addr, self.expr)
 
 
 class CIf(Instr):
@@ -990,8 +957,6 @@ class CIf(Instr):
     def operands(self) -> str:
         return f"{self.cond.render()} else->{self.else_begin} fi->{self.fi}"
 
-    def refs(self):
-        return (self.cond,)
 
 
 class CElseEnd(Instr):
@@ -1120,8 +1085,6 @@ class CUntil(Instr):
     def operands(self) -> str:
         return f"{self.cond.render()} cnt=%{self.counter} repeat->{self.repeat}"
 
-    def refs(self):
-        return (self.cond,)
 
 
 class CRepeat(Instr):

@@ -208,6 +208,30 @@ stopping and turning around, it does not.
 
 ---
 
+## What it costs
+
+`tools/bench.py` measures the claim that undoing a program costs what doing it
+costs. There is no log to write on the way out and none to read on the way
+back, so there should be no asymmetry to find:
+
+```
+case                             steps    forward   backward   fwd steps/s  bwd/fwd
+straight-line updates          160,007     112.4ms     102.8ms     1,423,495     0.91
+call / uncall                  144,021     143.3ms     144.1ms     1,005,093     1.01
+embed, tape-heavy              120,019      77.2ms      78.2ms     1,555,643     1.01
+array indexing                   5,463       4.1ms       4.0ms     1,338,101     0.99
+```
+
+About 1.4 million instructions a second in CPython, and reversal within noise
+of forward execution. The structural version of the same statement is checked
+by `test_reversing_costs_the_same_as_running`: a reversal executes exactly as
+many instructions as the run it undoes, with the forward and backward columns
+swapped.
+
+`rev doctor` reports the other cost — the tape — per program.
+
+---
+
 ## What is borrowed and what is not
 
 The surface language owes its shape to **Janus** (Lutz & Derby, 1986). The
