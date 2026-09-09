@@ -16,6 +16,7 @@ from reverie.ir import (
     idiv,
     imod,
     ipow,
+    as_written,
     ishl,
     ishr,
 )
@@ -73,6 +74,27 @@ def test_power():
         ipow(2, -1)
     with raises(RuntimeFault, "too large"):
         ipow(3, 10_000_000)
+
+
+def test_an_expression_can_be_rendered_as_it_was_written():
+    """Disassembly wants the sigils; a trap message quotes the source."""
+    e = Bin(">", Load(ParamA(0, "x")), Const(0))
+    eq(e.render(), "(&x > 0)")
+    eq(as_written(e), "(x > 0)")
+    eq(as_written(Load(AbsA(3, "total"))), "total")
+    eq(as_written(Load(LocalA(0, "i"))), "i")
+    eq(as_written(ArrayLen(ParamA(0, "xs"))), "len(xs)")
+    eq(as_written(Un("abs", Load(ParamA(0, "x")))), "abs(x)")
+    eq(as_written(Bin("min", Const(1), Const(2))), "min(1, 2)")
+    eq(as_written(StackQuery("size", AbsA(2, "s"))), "size(s)")
+    idx = IndexA(AbsA(4, "a"), Load(LocalA(0, "i")), 8, "a")
+    eq(as_written(Load(idx)), "a[i]")
+
+
+def test_rendering_as_source_falls_back_when_there_is_no_name():
+    eq(as_written(Load(AbsA(3))), "@3")
+    eq(as_written(Load(ParamA(1))), "&1")
+    eq(as_written(Load(LocalA(2))), "%2")
 
 
 def test_shifting():

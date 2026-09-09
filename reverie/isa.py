@@ -37,7 +37,7 @@ from __future__ import annotations
 from typing import Optional, Sequence
 
 from .diagnostics import RuntimeFault, Span
-from .ir import Addr, Expr, IndexA, idiv
+from .ir import Addr, Expr, IndexA, as_written, idiv
 
 # ---------------------------------------------------------------------------
 # base
@@ -279,7 +279,7 @@ class Assert(Instr):
     def _check(self, m) -> None:
         if self.expr.eval(m) == 0:
             raise RuntimeFault(
-                self.message or f"assertion failed: {self.expr.render()}", pc=self.at
+                self.message or f"assertion failed: {as_written(self.expr)}", pc=self.at
             )
 
     def forward(self, m) -> None:
@@ -616,7 +616,7 @@ class ElseEnd(Instr):
     def forward(self, m) -> None:
         if self.exit_cond.eval(m) == 0:
             raise RuntimeFault(
-                f"exit assertion `{self.exit_cond.render()}` must hold after the "
+                f"exit assertion `{as_written(self.exit_cond)}` must hold after the "
                 f"then-branch, otherwise the conditional could not be reversed",
                 pc=self.at,
             )
@@ -672,7 +672,7 @@ class Fi(Instr):
     def forward(self, m) -> None:
         if self.exit_cond.eval(m) != 0:
             raise RuntimeFault(
-                f"exit assertion `{self.exit_cond.render()}` must fail after the "
+                f"exit assertion `{as_written(self.exit_cond)}` must fail after the "
                 f"else-branch, otherwise the conditional could not be reversed",
                 pc=self.at,
             )
@@ -706,7 +706,7 @@ class From(Instr):
     def forward(self, m) -> None:
         if self.entry_cond.eval(m) == 0:
             raise RuntimeFault(
-                f"loop entry assertion `{self.entry_cond.render()}` must hold on "
+                f"loop entry assertion `{as_written(self.entry_cond)}` must hold on "
                 f"the first arrival",
                 pc=self.at,
             )
@@ -737,7 +737,7 @@ class Until(Instr):
     def backward(self, m) -> None:
         if self.exit_cond.eval(m) != 0:
             raise RuntimeFault(
-                f"loop exit assertion `{self.exit_cond.render()}` must fail when "
+                f"loop exit assertion `{as_written(self.exit_cond)}` must fail when "
                 f"re-entering the loop backwards",
                 pc=self.at,
             )
@@ -766,7 +766,7 @@ class Repeat(Instr):
     def forward(self, m) -> None:
         if self.entry_cond.eval(m) != 0:
             raise RuntimeFault(
-                f"loop entry assertion `{self.entry_cond.render()}` must fail on "
+                f"loop entry assertion `{as_written(self.entry_cond)}` must fail on "
                 f"every arrival after the first",
                 pc=self.at,
             )
@@ -775,7 +775,7 @@ class Repeat(Instr):
     def backward(self, m) -> None:
         if self.exit_cond.eval(m) == 0:
             raise RuntimeFault(
-                f"reverse-entering the loop requires `{self.exit_cond.render()}` to hold",
+                f"reverse-entering the loop requires `{as_written(self.exit_cond)}` to hold",
                 pc=self.at,
             )
         m.pc = self.until

@@ -14,7 +14,7 @@ reverie/     the language: lexer parser ast printer checker compiler rir
              isa vm inverter debugger trace viz verify cli
 stdlib/      array, math, bits, sort — written in Reverie
 examples/    fourteen programs, each making one point
-tests/       a dependency-free runner, a random program generator, ~800 cases
+tests/       a dependency-free runner, a random program generator, ~820 cases
 tools/       coverage, benchmarks, and the showcase page builder
 docs/        tutorial, language reference, ISA, design notes
 ```

@@ -244,7 +244,7 @@ composition is the identity, so errors that cancel survive it. Three did — see
 `docs/DESIGN.md`.
 
 ```console
-$ python3 tests/run_tests.py                 # 800 cases
+$ python3 tests/run_tests.py                 # 823 cases
 $ python3 tests/run_tests.py --slow --repeat 8   # several thousand generated programs
 $ python3 tests/run_tests.py --seed 1234     # reproduce a fuzz failure
 $ python3 tools/coverage.py                  # 97% of reverie/, no dependencies
@@ -297,7 +297,7 @@ reverie/
   cli.py                                 rev
 stdlib/    array, math, bits, sort
 examples/  fourteen programs
-tests/     a dependency-free runner, a program generator, 800 cases
+tests/     a dependency-free runner, a program generator, 823 cases
 tools/     coverage, benchmarks, and the page builder
 ```
 

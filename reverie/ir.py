@@ -96,7 +96,7 @@ class Addr:
         """
         return 1
 
-    def render(self) -> str:  # pragma: no cover - abstract
+    def render(self, source: bool = False) -> str:  # pragma: no cover - abstract
         raise NotImplementedError
 
     def children(self) -> Sequence["Addr | Expr"]:
@@ -131,7 +131,9 @@ class AbsA(Addr):
     def extent(self, m) -> int:
         return self.size
 
-    def render(self) -> str:
+    def render(self, source: bool = False) -> str:
+        if source and self.name:
+            return self.name
         return f"@{self.name or self.index}" if self.name else f"@{self.index}"
 
     def _key(self):
@@ -154,7 +156,9 @@ class LocalA(Addr):
     def extent(self, m) -> int:
         return self.size
 
-    def render(self) -> str:
+    def render(self, source: bool = False) -> str:
+        if source and self.name:
+            return self.name
         return f"%{self.name}+{self.off}" if self.name else f"%{self.off}"
 
     def _key(self):
@@ -185,7 +189,9 @@ class ParamA(Addr):
             raise RuntimeFault("parameter access outside of a procedure frame")
         return frame.param_lens[self.index]
 
-    def render(self) -> str:
+    def render(self, source: bool = False) -> str:
+        if source and self.name:
+            return self.name
         return f"&{self.name}" if self.name else f"&{self.index}"
 
     def _key(self):
@@ -215,8 +221,8 @@ class IndexA(Addr):
     def extent(self, m) -> int:
         return 1
 
-    def render(self) -> str:
-        return f"{self.base.render()}[{self.index.render()}]"
+    def render(self, source: bool = False) -> str:
+        return f"{self.base.render(source)}[{self.index.render(source)}]"
 
     def children(self):
         return (self.base, self.index)
@@ -253,6 +259,17 @@ BINOPS = {
 
 SHORT_CIRCUIT = {"&&", "||"}
 
+
+def as_written(e) -> str:
+    """An expression as the programmer wrote it, for a message they will read.
+
+    ``render()`` decorates every address with where it lives -- ``@x`` global,
+    ``&x`` parameter, ``%x+0`` local -- which is what you want in a
+    disassembly and noise in a trap.  A runtime fault quotes the predicate
+    back to whoever wrote it, so it drops the sigils.
+    """
+    return e.render(True)
+
 UNOPS = {
     "-": lambda a: -a,
     "+": lambda a: a,
@@ -271,7 +288,7 @@ class Expr:
     def eval(self, m) -> int:  # pragma: no cover - abstract
         raise NotImplementedError
 
-    def render(self) -> str:  # pragma: no cover - abstract
+    def render(self, source: bool = False) -> str:  # pragma: no cover - abstract
         raise NotImplementedError
 
     def children(self) -> Sequence["Expr | Addr"]:
@@ -299,7 +316,7 @@ class Const(Expr):
     def eval(self, m) -> int:
         return self.value
 
-    def render(self) -> str:
+    def render(self, source: bool = False) -> str:
         return str(self.value)
 
     def _key(self):
@@ -315,8 +332,8 @@ class Load(Expr):
     def eval(self, m) -> int:
         return m.mem[self.addr.resolve(m)]
 
-    def render(self) -> str:
-        return self.addr.render()
+    def render(self, source: bool = False) -> str:
+        return self.addr.render(source)
 
     def children(self):
         return (self.addr,)
@@ -336,8 +353,8 @@ class ArrayLen(Expr):
     def eval(self, m) -> int:
         return self.addr.extent(m)
 
-    def render(self) -> str:
-        return f"len({self.addr.render()})"
+    def render(self, source: bool = False) -> str:
+        return f"len({self.addr.render(source)})"
 
     def children(self):
         return (self.addr,)
@@ -364,10 +381,11 @@ class Bin(Expr):
             return 1 if (self.left.eval(m) != 0 or self.right.eval(m) != 0) else 0
         return BINOPS[op](self.left.eval(m), self.right.eval(m))
 
-    def render(self) -> str:
+    def render(self, source: bool = False) -> str:
+        left, right = self.left.render(source), self.right.render(source)
         if self.op in ("min", "max"):
-            return f"{self.op}({self.left.render()}, {self.right.render()})"
-        return f"({self.left.render()} {self.op} {self.right.render()})"
+            return f"{self.op}({left}, {right})"
+        return f"({left} {self.op} {right})"
 
     def children(self):
         return (self.left, self.right)
@@ -388,10 +406,10 @@ class Un(Expr):
     def eval(self, m) -> int:
         return UNOPS[self.op](self.operand.eval(m))
 
-    def render(self) -> str:
+    def render(self, source: bool = False) -> str:
         if self.op in ("abs", "sign"):
-            return f"{self.op}({self.operand.render()})"
-        return f"{self.op}{self.operand.render()}"
+            return f"{self.op}({self.operand.render(source)})"
+        return f"{self.op}{self.operand.render(source)}"
 
     def children(self):
         return (self.operand,)
@@ -424,8 +442,8 @@ class StackQuery(Expr):
             raise RuntimeFault("top() of an empty stack")
         return st[-1]
 
-    def render(self) -> str:
-        return f"{self.kind}({self.addr.render()})"
+    def render(self, source: bool = False) -> str:
+        return f"{self.kind}({self.addr.render(source)})"
 
     def children(self):
         return (self.addr,)

@@ -109,6 +109,38 @@ def excerpt(path: str, start: str, end: str | None = None) -> str:
     return text[i:j].rstrip()
 
 
+#: a procedure whose exit predicate is wrong, for the search to find.  It is
+#: not in `examples/` because everything there has to pass.
+BROKEN = """/// Count x down by one, and count y up once x has run out.
+proc drain(int x, int y) {
+    if x > 0 {
+        x -= 1;
+    } else {
+        y += 1;
+    } fi x > 0;
+}
+
+proc main() { }
+"""
+
+
+def verify_demo() -> dict:
+    """Run the real search over a real bug, and over a real library."""
+    import tempfile
+
+    d = tempfile.mkdtemp(prefix="reverie-artifact-")
+    path = os.path.join(d, "drain.rev")
+    with open(path, "w") as fh:
+        fh.write(BROKEN)
+    broken = run_cli(["verify", path, "--cases", "40"])
+    broken = broken.replace(path, "drain.rev").replace(d + os.sep, "")
+    return {
+        "source": BROKEN.rstrip(),
+        "broken": broken,
+        "clean": run_cli(["verify", "stdlib/array.rev", "--cases", "25"]),
+    }
+
+
 def collect() -> dict:
     bad = """int total;
 
@@ -142,6 +174,7 @@ proc main() {
         "fibonacci": run_cli(["run", "examples/fibonacci.rev", "--set", "n=10"]),
         # a real compare-and-swap, where the exit predicate genuinely differs
         # between the branches
+        "verify": verify_demo(),
         "conditional": dedent(
             excerpt("stdlib/sort.rev", "            local int swapped", "        } loop {")
         ),

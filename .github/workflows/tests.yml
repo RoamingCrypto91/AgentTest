@@ -38,6 +38,13 @@ jobs:
             python3 -m reverie check "$f"
           done
 
+      - name: every procedure, held to the domain it claims
+        run: |
+          for f in stdlib/*.rev examples/*.rev; do
+            echo "--- $f"
+            python3 -m reverie verify "$f" --cases 25
+          done
+
       - name: mutation testing
         run: python3 tools/mutate.py --quiet --min 95
 

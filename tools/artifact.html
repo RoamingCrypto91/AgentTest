@@ -532,6 +532,61 @@ footer .file { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
   </div>
 </section>
 
+<section class="stack">
+  <h2><span class="num">and then</span>The same oracle, pointed at your code</h2>
+  <div class="split">
+    <div class="stack">
+      <p>
+        Everything above tests the implementation. The same property tests
+        <i>programs</i>. A procedure here already carries its specification —
+        every <code>fi</code> predicate, every loop’s entry assertion, every
+        <code>delocal</code> expression is a claim the machine checks — so
+        nobody has to write an expected answer down.
+      </p>
+      <p>
+        <code>rev verify</code> builds a driver around each procedure, hands it
+        random arguments, and checks two things: that forward-then-backward
+        restores the starting state, and that <code>call f</code> followed by
+        <code>uncall f</code> leaves it alone. The second is not the first
+        run twice — it enters the body at the far end, with time still pointing
+        forwards.
+      </p>
+      <p class="callout">
+        A random counterexample is unreadable, so it gets shrunk: try simpler
+        inputs, keep whichever still fails, stop when nothing simpler does.
+      </p>
+      <figure>
+        <figcaption>drain.rev — the exit test is wrong</figcaption>
+        <pre class="code" id="verify-src"></pre>
+      </figure>
+    </div>
+    <div class="stack">
+      <figure>
+        <figcaption>$ rev verify drain.rev</figcaption>
+        <pre class="term" id="verify-broken"></pre>
+      </figure>
+      <p>
+        Not every procedure is total. <code>swap_at(xs, i, j)</code> is not
+        reversible for <code>i = -1</code>, and reporting that as a bug is
+        reporting a missing sentence of documentation. So a procedure states
+        its domain in its doc comment, in ordinary Reverie — a condition to
+        filter inputs, a pinned value for a needle no filter would find, or the
+        name of code that builds a state no predicate can describe.
+      </p>
+      <figure>
+        <figcaption>$ rev verify stdlib/array.rev</figcaption>
+        <pre class="term" id="verify-clean"></pre>
+      </figure>
+      <p class="muted" style="font-size:14px">
+        Writing those annotations for the shipped library was itself the test.
+        It turned up six undocumented preconditions and one real interpreter
+        bug: <code>x &gt;&gt; -1</code> raised a Python error instead of
+        trapping.
+      </p>
+    </div>
+  </div>
+</section>
+
 <footer>
   <div class="grid">
     <div>
@@ -541,6 +596,7 @@ footer .file { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
         <li><span class="file">checker.py</span><br><span class="muted">the static proof that a program is injective</span></li>
         <li><span class="file">rir.py · compiler.py</span><br><span class="muted">lowering, and inversion as an IR operation</span></li>
         <li><span class="file">debugger.py · viz.py</span><br><span class="muted">travelling through an execution</span></li>
+        <li><span class="file">verify.py</span><br><span class="muted">the search for an input a procedure cannot undo</span></li>
       </ul>
       <p class="muted" style="margin-top:12px">
         8,000 lines of Python for the language, 7,000 more for the tests that
@@ -548,7 +604,7 @@ footer .file { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
       </p>
     </div>
     <div>
-      <h3>thirteen examples</h3>
+      <h3>fourteen examples</h3>
       <ul class="muted">
         <li><span class="file">fibonacci</span> — uncall inverts a function</li>
         <li><span class="file">rle</span> — the encoder backwards is the decoder</li>
@@ -587,6 +643,9 @@ const esc = s => s.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c
 document.getElementById("cond-code").textContent = D.conditional;
 document.getElementById("fib").textContent = D.fibonacci;
 document.getElementById("doctor").textContent = D.doctor;
+document.getElementById("verify-src").textContent = D.verify.source;
+document.getElementById("verify-broken").textContent = D.verify.broken;
+document.getElementById("verify-clean").textContent = D.verify.clean;
 
 const RULES = [
   ["01", "<b>No self-reference in an update.</b> The right-hand side must not read the target."],

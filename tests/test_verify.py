@@ -495,3 +495,149 @@ def test_every_example_is_reversible_on_every_input_tried():
         for r in reports:
             is_true(r.ok, f"{name}: {r.proc}: "
                           f"{r.failure and r.failure.describe()}")
+
+
+# ---------------------------------------------------------------------------
+# corners
+# ---------------------------------------------------------------------------
+
+
+def test_argument_globals_avoid_names_the_program_already_uses():
+    eq(V._fresh("a", set()), "a")
+    taken = {"a", "a_1"}
+    eq(V._fresh("a", taken), "a_2")
+    is_true("a_2" in taken, "the new name should be claimed")
+
+
+def test_a_driver_works_around_a_collision():
+    text = "int __arg_x;\nproc f(int x) { x += 1; }" + MAIN
+    m = module(text)
+    d = V.Driver(m, m.find_proc("f"), 4)
+    is_true(d.argnames[0] != "__arg_x", "the driver reused an existing name")
+    is_true(check(text, "f").ok)
+
+
+def test_a_requires_that_traps_rejects_the_input_rather_than_the_program():
+    """`requires: 1 / i` divides by zero when i is zero; that is a rejection."""
+    text = """
+/// requires: (1 / i) != 0
+proc poke(int xs[], int i) {
+    xs[0] += i;
+}
+""" + MAIN
+    r = check(text, "poke", cases=6)
+    is_true(r.ok, r.failure and r.failure.describe())
+    is_true(r.cases > 0, "every input was rejected")
+
+
+def test_shrinking_reaches_inside_an_array():
+    """Zeroing the array does not preserve the failure, so elements shrink."""
+    text = """
+proc drain(int xs[]) {
+    if xs[0] > 0 {
+        xs[0] -= 1;
+    } else {
+        skip;
+    } fi xs[0] > 0;
+}
+""" + MAIN
+    r = check(text, "drain", cases=60, length=3)
+    is_true(not r.ok, "the bad exit test was missed")
+    eq(r.failure.inputs, {"xs": [1, 0, 0]})
+
+
+def test_a_state_that_differs_without_a_trap_is_reported():
+    """The oracle's own verdict, with the machine standing in for a broken one."""
+    m = module(GOOD)
+    d = V.Driver(m, m.find_proc("bump"), 4)
+    real = V.state_equal
+    V.state_equal = lambda a, b: (False, "mem[3]: 1 != 0")
+    try:
+        failure, _ = V.check_case(d, {d.argnames[1]: 1}, "undo",
+                                  mem=4096, max_steps=1000, paranoid=False)
+    finally:
+        V.state_equal = real
+    contains(failure.reason, "mem[3]")
+
+
+@case(RecursionError, "ran out of stack")
+@case(ZeroDivisionError, "the interpreter crashed: ZeroDivisionError")
+def test_an_exception_escaping_the_machine_becomes_a_counterexample(exc, said):
+    m = module(GOOD)
+    d = V.Driver(m, m.find_proc("bump"), 4)
+
+    def boom(a, b):
+        raise exc("bang")
+
+    real = V.state_equal
+    V.state_equal = boom
+    try:
+        failure, _ = V.check_case(d, {}, "undo", mem=4096, max_steps=1000,
+                                  paranoid=False)
+    finally:
+        V.state_equal = real
+    contains(failure.reason, said)
+
+
+def test_shrinking_stops_when_its_budget_runs_out():
+    m = module(BROKEN)
+    d = V.Driver(m, m.find_proc("drain"), 4)
+    budget = V.SHRINK_BUDGET
+    V.SHRINK_BUDGET = 1
+    try:
+        start = dict(zip(d.argnames, (9, 9)))
+        f = V.shrink(d, V.Failure("undo", "boom", start),
+                     mem=4096, max_steps=2000, paranoid=False)
+    finally:
+        V.SHRINK_BUDGET = budget
+    is_true(f.shrinks <= 1, "the budget was ignored")
+
+
+def test_shrinking_skips_a_candidate_that_will_not_terminate():
+    """A candidate that runs away is not evidence either way."""
+    text = """
+proc drain(int x, int y) {
+    if x > 0 {
+        x -= 1;
+    } else {
+        local int i = 0;
+        from i == 0 do { y += 1; } loop { i += 1; } until i == x;
+        delocal int i = x;
+    } fi x > 0;
+}
+""" + MAIN
+    r = check(text, "drain", cases=40, max_steps=3000)
+    is_true(not r.ok, "the bad exit test was missed")
+    eq(r.failure.inputs["x"], 1)
+
+
+def test_the_search_stops_early_if_the_domain_dries_up():
+    m = module(GOOD)
+    decl = m.find_proc("bump")
+    seen = []
+    real = V.Driver.satisfies
+
+    def once(self, values, mem=1 << 12):
+        seen.append(values)
+        return len(seen) == 1
+
+    V.Driver.satisfies = once
+    try:
+        r = V.verify_proc(m, decl, cases=9)
+    finally:
+        V.Driver.satisfies = real
+    eq(r.cases, 1)
+    eq(r.skipped, "")
+    is_true(len(seen) > 1, "the search gave up without trying again")
+
+
+def test_the_same_input_is_never_run_twice():
+    text = """
+/// given: x = 0
+/// requires: k == 1 || k == 2
+proc bump(int x, int k) {
+    x += k;
+}
+""" + MAIN
+    r = check(text, "bump", cases=30)
+    eq(r.cases, 2, "there are only two inputs in the domain")
