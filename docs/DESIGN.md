@@ -262,6 +262,21 @@ describe. The conditions are compiled by the same compiler and run on the same
 machine as everything else — a guard is a procedure, not an interpreter for a
 second little language.
 
+**Does the search have teeth?** The same question the mutation tool asks of
+the machine, asked of the search: `tools/mutate_programs.py` breaks the shipped
+library and examples on purpose -- one predicate, one `delocal`, one loop step
+at a time -- and reports what `rev verify` makes of each mutant. Of the changes
+that should break reversibility, it catches 93%.
+
+The rest is the interesting part, because a survivor here is usually not a
+hole. Reversibility is a claim about whether a procedure can be undone, not
+about what it computes. Turning `acc += xs[i]` into `acc -= xs[i]` gives a
+different procedure that is just as invertible, and so does flipping a test at
+both ends at once, which is what `} fi;` with no expression means. The tool
+makes those separately and counts them apart, so the difference between "the
+search is weak here" and "the property does not claim this" stays visible
+rather than assumed.
+
 Writing those annotations for the shipped code was itself the test. It found
 two undocumented preconditions in `stdlib/array.rev`, three in `bits.rev`, one
 in `math.rev`, and one real interpreter bug: `x >> -1` raised a Python

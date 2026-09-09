@@ -245,11 +245,12 @@ composition is the identity, so errors that cancel survive it. Three did — see
 `docs/DESIGN.md`.
 
 ```console
-$ python3 tests/run_tests.py                 # 825 cases
+$ python3 tests/run_tests.py                 # 829 cases
 $ python3 tests/run_tests.py --slow --repeat 8   # several thousand generated programs
 $ python3 tests/run_tests.py --seed 1234     # reproduce a fuzz failure
 $ python3 tools/coverage.py                  # 97% of reverie/, no dependencies
 $ python3 tools/mutate.py                    # would the tests notice if it broke?
+$ python3 tools/mutate_programs.py           # would `rev verify` notice a bad program?
 $ python3 tools/bench.py                     # and what it costs
 ```
 
@@ -298,7 +299,7 @@ reverie/
   cli.py                                 rev
 stdlib/    array, math, bits, sort
 examples/  fourteen programs
-tests/     a dependency-free runner, a program generator, 825 cases
+tests/     a dependency-free runner, a program generator, 829 cases
 tools/     coverage, benchmarks, and the page builder
 ```
 
