@@ -284,8 +284,8 @@ language's defining property into the oracle.
   are dynamic in a way that stays balanced.
 - **Escape hatches.** There is no `unsafe`, no `forget`, no way to drop a value.
   A program that needs to discard something must say where it goes.
-- **An assembler.** `rev disasm` prints the bytecode, but there is no `rev asm`
-  to read it back. The disassembly is a *view*; making it round-trip would
+- **An assembler.** `rev disasm` prints the bytecode, but nothing reads it
+  back. The disassembly is a *view*; making it round-trip would
   freeze the renderer as a file format for no gain, since the bytecode is
   reached through the compiler and the compiler is tested against the source.
 - **A `for` loop.** Every loop carries the boilerplate of a counter and its
