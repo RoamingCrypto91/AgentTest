@@ -65,6 +65,7 @@ class Generator:
         self.frozen: set[str] = set()
         self.loop_depth = 0
         self.helpers: list[str] = []
+        self.uses_array_helper = False
 
     # -- helpers ----------------------------------------------------------
     def fresh(self, prefix: str = "t") -> str:
@@ -313,15 +314,34 @@ class Generator:
         return [f"{indent}undo {{"] + lines + [f"{indent}}}"]
 
     def embed_stmt(self, indent: str) -> list[str]:
-        target = self.pick(self.writable() or DATA)
+        targets = self.writable() or DATA
+        target = self.pick(targets)
         a, c, n = self.fresh("a"), self.fresh("c"), self.rng.randint(1, 4)
-        self._excluded = {target}
+        self._excluded = set(targets)
         seed = self.safe_expr(1)
         self._excluded = set()
+        second = None
+        if self.maybe(0.35) and len(targets) > 1:
+            second = self.pick([t for t in targets if t != target])
+        header = f"{target} ^= {a}"
+        if second:
+            header += f", {second} {self.pick(['+=', '^='])} {c} * 3"
         lines = [
-            f"{indent}embed ({target} ^= {a}) {{",
+            f"{indent}embed ({header}) {{",
             f"{indent}    var {a} = {seed};",
             f"{indent}    var {c} = 0;",
+        ]
+        if self.maybe(0.4):
+            t = self.fresh("t")
+            m = self.rng.randint(2, 4)
+            lines += [
+                f"{indent}    var {t}[{m}];",
+                f"{indent}    for (var {c}i = 0; {c}i < {m}; {c}i = {c}i + 1) {{",
+                f"{indent}        {t}[{c}i] = {c}i * 3 + {a};",
+                f"{indent}    }}",
+                f"{indent}    {a} = {a} + {t}[{m - 1}];",
+            ]
+        lines += [
             f"{indent}    while ({c} < {n}) {{",
             f"{indent}        {c} = {c} + 1;",
             f"{indent}        {a} = {a} + {c} * 2;",
@@ -340,7 +360,44 @@ class Generator:
 
     def print_stmt(self, indent: str) -> list[str]:
         self._excluded = set()
+        if self.maybe(0.4):
+            # a line built in pieces exercises the partial-line buffer
+            return [
+                f'{indent}write "v=";',
+                f"{indent}write {self.safe_expr(1)};",
+                f'{indent}print " done";',
+            ]
         return [f'{indent}print "v=", {self.safe_expr(1)};']
+
+    def local_array_stmt(self, indent: str) -> list[str]:
+        """A scratch array, which has to be zeroed again before release."""
+        name = self.fresh("buf")
+        n = self.rng.randint(2, 4)
+        target = self.pick(self.writable() or DATA)
+        self._excluded = set(DATA) | {ARRAY, STACK}
+        fills = [
+            (self.rng.randrange(n), self.pick(["+=", "-=", "^="]), self.safe_expr(1))
+            for _ in range(self.rng.randint(1, 3))
+        ]
+        self._excluded = set()
+        undo = {"+=": "-=", "-=": "+=", "^=": "^="}
+        return (
+            [f"{indent}{{", f"{indent}    local int {name}[{n}];"]
+            + [f"{indent}    {name}[{i}] {op} {e};" for i, op, e in fills]
+            + [f"{indent}    {target} ^= {name}[{self.rng.randrange(n)}];"]
+            + [
+                f"{indent}    {name}[{i}] {undo[op]} {e};"
+                for i, op, e in reversed(fills)
+            ]
+            + [f"{indent}    delocal int {name}[{n}];", f"{indent}}}"]
+        )
+
+    def array_call_stmt(self, indent: str) -> list[str]:
+        """Pass a whole array to a procedure that takes an open parameter."""
+        self.uses_array_helper = True
+        target = self.pick(self.writable() or DATA)
+        kw = "uncall" if self.maybe(0.3) else "call"
+        return [f"{indent}{kw} scan({ARRAY}, {target});"]
 
     def statement(self, indent: str, depth: int, calls: bool = True) -> list[str]:
         roll = self.rng.random()
@@ -353,14 +410,18 @@ class Generator:
                 return self.local_block(indent, depth)
             if roll < 0.44 and self.allow_undo:
                 return self.undo_stmt(indent, depth, calls)
-        if roll < 0.52 and self.allow_stack:
+        if roll < 0.50 and self.allow_stack:
             return self.stack_stmt(indent)
-        if roll < 0.6 and self.allow_calls and calls:
+        if roll < 0.56 and self.allow_calls and calls:
             return self.call_stmt(indent)
-        if roll < 0.68 and self.allow_embed:
+        if roll < 0.60 and self.allow_calls and calls:
+            return self.array_call_stmt(indent)
+        if roll < 0.66 and self.allow_embed:
             return self.embed_stmt(indent)
-        if roll < 0.72 and self.allow_print:
+        if roll < 0.70 and self.allow_print:
             return self.print_stmt(indent)
+        if roll < 0.74:
+            return self.local_array_stmt(indent)
         return self.update(indent)
 
     def block(self, indent: str, depth: int, calls: bool = True) -> list[str]:
@@ -387,6 +448,19 @@ class Generator:
                 f"    p += q * {self.rng.randint(1, 3)};\n"
                 f"    q ^= {self.rng.randint(1, 15)};\n"
                 f"}}"
+            )
+        if self.uses_array_helper:
+            helpers.append(
+                "proc scan(int xs[], int acc) {\n"
+                "    local int i = 0;\n"
+                "    from i == 0 do {\n"
+                "        acc ^= xs[i] * (i + 1);\n"
+                "    } loop {\n"
+                "        i += 1;\n"
+                "    } until i == len(xs) - 1;\n"
+                "    delocal int i = len(xs) - 1;\n"
+                "    acc += len(xs);\n"
+                "}"
             )
         self._excluded = set()
         return (

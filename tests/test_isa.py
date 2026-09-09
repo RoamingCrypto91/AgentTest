@@ -348,3 +348,116 @@ def test_assert_carries_its_message_in_both_directions():
     m.start_backward()
     with raises(RuntimeFault, "x must be one"):
         m.run()
+
+
+# ---------------------------------------------------------------------------
+# integrity checks on the classical instructions
+#
+# These guard states that valid programs never reach, which makes them
+# invisible to end-to-end testing -- and exactly the kind of check that rots.
+# They are driven directly here.
+# ---------------------------------------------------------------------------
+
+
+def bare_machine(frame=4):
+    """A machine with one open frame, ready to run a single instruction."""
+    from reverie.vm import ProcInfo
+
+    p = prog(rir.RSkip(), frame_size=frame)
+    m = Machine(p, mem_size=64)
+    info = p.procs["main"]
+    m.enter_frame(info, [], [], 0, False)
+    return m
+
+
+def fire(ins, m, direction="forward", at=0):
+    ins.at = at
+    getattr(ins, direction)(m)
+
+
+def test_a_classical_loop_refuses_a_dirty_counter():
+    from reverie.isa import CFrom
+
+    m = bare_machine()
+    m.mem[m.fp] = 3
+    with raises(RuntimeFault, "counter was not zero on entry"):
+        fire(CFrom(0), m)
+
+
+def test_a_classical_loop_tail_requires_a_counted_iteration():
+    from reverie.isa import CRepeat
+
+    m = bare_machine()
+    ins = CRepeat(0)
+    ins.from_at, ins.until = 0, 1
+    with raises(RuntimeFault, "without counting an iteration"):
+        fire(ins, m)
+
+
+def test_reverse_entering_a_classical_loop_checks_the_counter():
+    from reverie.isa import CRepeat
+
+    m = bare_machine()
+    m.mem[m.fp] = 2
+    ins = CRepeat(0)
+    ins.from_at, ins.until = 0, 1
+    with raises(RuntimeFault, "not zero on reverse entry"):
+        fire(ins, m, "backward")
+
+
+def test_the_tape_cannot_underflow():
+    from reverie.isa import CFi, CRepeat, CSet
+
+    m = bare_machine()
+    ins = CRepeat(0)
+    ins.from_at, ins.until = 0, 1
+    with raises(RuntimeFault, "history tape underflow in crepeat"):
+        fire(ins, m, "backward")
+
+    fi = CFi()
+    fi.then_end, fi.else_end = 1, 2
+    with raises(RuntimeFault, "history tape underflow in cfi"):
+        fire(fi, m, "backward")
+
+    with raises(RuntimeFault, "history tape underflow in cset"):
+        fire(CSet(LocalA(0, "t"), Const(1)), m, "backward")
+
+    m2 = bare_machine()
+    m2.history.append(0)
+    with raises(RuntimeFault, "history tape underflow in cset"):
+        fire(CSet(IndexA(LocalA(0, "t"), Const(0), 2, "t"), Const(1)), m2, "backward")
+
+
+def test_a_classical_loop_counts_and_uncounts():
+    """The head and the test have to agree, or the loop drifts."""
+    from reverie.isa import CFrom, CUntil
+
+    m = bare_machine()
+    head, test = CFrom(0), CUntil(Const(1), 0)
+    head.repeat, test.repeat = 9, 9
+    fire(head, m, at=0)
+    eq(m.mem[m.fp], 0)
+    for expected in (1, 2, 3):
+        fire(test, m, at=1)
+        eq(m.mem[m.fp], expected)
+    for expected in (2, 1, 0):
+        fire(test, m, "backward", at=1)
+        eq(m.mem[m.fp], expected)
+
+
+def test_the_exit_of_a_classical_loop_banks_the_counter():
+    from reverie.isa import CRepeat, CUntil
+
+    m = bare_machine()
+    m.mem[m.fp] = 7
+    test = CUntil(Const(0), 0)  # condition false -> leave the loop
+    test.repeat = 9
+    fire(test, m, at=1)
+    eq(m.mem[m.fp], 0, "the counter is banked, not left behind")
+    eq(list(m.history), [7])
+
+    tail = CRepeat(0)
+    tail.from_at, tail.until = 0, 1
+    fire(tail, m, "backward", at=9)
+    eq(m.mem[m.fp], 7, "and handed back on the way in")
+    eq(list(m.history), [])

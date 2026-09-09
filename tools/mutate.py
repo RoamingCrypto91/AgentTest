@@ -119,8 +119,12 @@ def flip_predicate(which: str):
 #: mutants that cannot be killed because they are not really mutations --
 #: the replacement does exactly what the original did
 EQUIVALENT = {
+    # `nop` doing nothing is precisely what `nop` does
     ("Nop", "forward does nothing"),
     ("Nop", "backward does nothing"),
+    # `cif` going backwards is only a pc move, and the replacement moves it
+    # the same way
+    ("CIf", "backward does nothing"),
 }
 
 MUTATIONS = [
