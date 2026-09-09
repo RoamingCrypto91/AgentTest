@@ -461,3 +461,39 @@ def test_the_exit_of_a_classical_loop_banks_the_counter():
     fire(tail, m, "backward", at=9)
     eq(m.mem[m.fp], 7, "and handed back on the way in")
     eq(list(m.history), [])
+
+
+def test_reverse_entering_a_loop_checks_the_exit_test():
+    """Walking back into a loop body, the exit test must not already hold."""
+    from reverie.isa import Until
+
+    body = rir.RLoop(
+        Bin("==", Load(AbsA(X, "x")), Const(0)),
+        rir.RSkip(),
+        rir.RUpdate("+", AbsA(X, "x"), Const(1)),
+        Bin("==", Load(AbsA(X, "x")), Const(3)),
+    )
+    p = prog(body)
+    m = Machine(p, mem_size=64)
+    m.start_forward()
+    for _ in range(4):
+        m.step()
+    # tamper: make the exit test true at a point the loop is still running
+    m.set_globals({"x": 3})
+    m.reverse()
+    with raises(RuntimeFault, "must fail when re-entering the loop backwards"):
+        m.run()
+
+
+def test_the_tail_of_a_loop_checks_the_entry_test():
+    """Arriving at the tail, the entry assertion must no longer hold."""
+    p = prog(
+        rir.RLoop(
+            Bin("==", Load(AbsA(X, "x")), Const(0)),
+            rir.RSkip(),
+            rir.RUpdate("+", AbsA(Y, "y"), Const(1)),
+            Bin("==", Load(AbsA(Y, "y")), Const(3)),
+        )
+    )
+    with raises(RuntimeFault, "must fail on every arrival"):
+        run(p, {})
