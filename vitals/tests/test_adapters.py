@@ -217,3 +217,50 @@ class Timestamps(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Roster(unittest.TestCase):
+    """Join dates, merged in from wherever they could be found."""
+
+    def setUp(self):
+        from vitals import roster
+
+        self.roster = roster
+        self.community = adapters.load(write(json.dumps(DISCORD),
+                                             name="general.json"), fmt="discord")
+
+    def test_a_roster_switches_the_arrival_measures_on(self):
+        from vitals.interactions import derive
+        from vitals.metrics import measure
+
+        before = measure(self.community, derive(self.community))
+        self.assertFalse(before["activation"].measured)
+
+        path = write("actor,joined_at,staff,bot\n"
+                     "u1,2026-01-01T00:00:00Z,0,0\n"
+                     "u2,2025-12-01T00:00:00Z,1,0\n"
+                     "u9,2026-01-02T00:00:00Z,0,0\n", name="roster.csv")
+        merged = self.roster.merge(self.community, path)
+        self.assertTrue(merged.has_roster)
+        after = measure(merged, derive(merged))
+        self.assertTrue(after["never_spoke"].measured)
+        # u9 never said a word and is now visible
+        self.assertGreater(after["never_spoke"].value, 0.0)
+
+    def test_members_who_never_posted_join_the_timeline(self):
+        path = write("actor,joined_at\nu9,2026-01-02T00:00:00Z\n", name="r.csv")
+        merged = self.roster.merge(self.community, path)
+        self.assertIn("u9", merged.members)
+        self.assertTrue(any(e.actor == "u9" for e in merged.events))
+
+    def test_a_roster_without_the_columns_says_which(self):
+        path = write("user,when\nu1,2026-01-01\n", name="bad.csv")
+        with self.assertRaises(ValueError) as caught:
+            self.roster.merge(self.community, path)
+        self.assertIn("joined_at", str(caught.exception))
+
+    def test_an_empty_roster_is_refused(self):
+        path = write("actor,joined_at\n", name="empty.csv")
+        with self.assertRaises(ValueError) as caught:
+            self.roster.merge(self.community, path)
+        self.assertIn("no usable rows", str(caught.exception))

@@ -27,9 +27,12 @@ python3 -m vitals show events.csv             # the numbers, in the terminal
 
 ## On a real community
 
+See `GETTING-DATA.md` for how to obtain an export from each platform, and for
+the one fact no export tool gives you.
+
 ```bash
 # DiscordChatExporter JSON, one channel or a directory of them
-python3 -m vitals audit export/ --staff "Dan" --staff "Mod" -o report.html
+python3 -m vitals audit export/ --staff "Dan" --roster members.csv -o report.html
 
 # a Slack workspace export
 python3 -m vitals audit slack-export/ -o report.html
@@ -83,8 +86,11 @@ vitals/
   bench.py          turning stored audits into measured benchmarks
   adapters/         discord, slack, csv
   tests/            116 cases, standard library only
+  roster.py         join dates, merged in from wherever they can be found
   MODEL.md          what is measured and why
   PLAYBOOK.md       generated from the library, so it cannot drift
+  GETTING-DATA.md   how to get an export out of each platform
+  COMMERCIAL.md     what to sell, and in what order
 ```
 
 ## How it is validated

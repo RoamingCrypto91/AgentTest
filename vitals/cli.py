@@ -6,6 +6,7 @@
     vitals demo dying -o demo.html               a report from a simulated community
     vitals template -o events.csv                the shape a CSV needs to be
     vitals playbook -o PLAYBOOK.md               every intervention, as a document
+    vitals audit export/ --roster members.csv    join dates, if you can get them
     vitals benchmark audits/*.json -o bands.json turn past audits into benchmarks
 """
 
@@ -17,7 +18,7 @@ import os
 import sys
 from typing import Optional
 
-from . import adapters, audit, bench, report, simulate
+from . import adapters, audit, bench, report, roster, simulate
 from .model import FAILING, HOLDING, STRAINED
 
 TEMPLATE = """timestamp,actor,surface,kind,id,parent_id,addressed,staff,words
@@ -40,12 +41,15 @@ def _paint(text: str, code: str, stream) -> str:
 
 
 def _load(args):
-    return adapters.load(
+    community = adapters.load(
         args.file, fmt=getattr(args, "format", "") or "",
         staff=tuple(getattr(args, "staff", None) or ()),
         name=getattr(args, "name", "") or "",
         surfaces_file=getattr(args, "surfaces", "") or "",
     )
+    if getattr(args, "roster", ""):
+        community = roster.merge(community, args.roster)
+    return community
 
 
 def cmd_audit(args, out=None) -> int:
@@ -199,6 +203,10 @@ def make_parser() -> argparse.ArgumentParser:
         p.add_argument("--staff", action="append", default=[],
                        help="a name or id that runs the place (repeatable)")
         p.add_argument("--name", default="", help="what to call the community")
+        p.add_argument("--roster", default="",
+                       help="a CSV of actor,joined_at for every member, "
+                            "including the ones who never posted -- this is "
+                            "what switches the arrival measures on")
         p.add_argument("--surfaces", default="",
                        help="a text file of room names, one per line, so that "
                             "silent rooms stay visible")
