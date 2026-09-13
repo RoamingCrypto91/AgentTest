@@ -1,0 +1,617 @@
+<title>The Belonging Ladder</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Karla:wght@400;500;600&family=Spectral:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+:root{
+  --paper:#fbfaf8; --surface:#ffffff; --sunk:#f3f2ee;
+  --ink:#17191a; --soft:#565c5e; --faint:#8b9294;
+  --edge:#e3e1dc; --hair:#eeece7;
+  --pine:#1d5c4f; --pine-wash:#e6efeb;
+  --rust:#a8432c; --rust-wash:#f7e9e5;
+  --ochre:#8f6418;
+  color-scheme:light dark;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#121415; --surface:#1a1d1e; --sunk:#16191a;
+    --ink:#eceeed; --soft:#a8b0b0; --faint:#7d8687;
+    --edge:#2b3031; --hair:#232828;
+    --pine:#6cbfa9; --pine-wash:#16302b;
+    --rust:#e08573; --rust-wash:#2e1e1a;
+    --ochre:#d0a044;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#121415; --surface:#1a1d1e; --sunk:#16191a;
+  --ink:#eceeed; --soft:#a8b0b0; --faint:#7d8687;
+  --edge:#2b3031; --hair:#232828;
+  --pine:#6cbfa9; --pine-wash:#16302b;
+  --rust:#e08573; --rust-wash:#2e1e1a;
+  --ochre:#d0a044;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font:400 16.5px/1.62 Karla,system-ui,-apple-system,Segoe UI,sans-serif;
+  -webkit-font-smoothing:antialiased; -webkit-text-size-adjust:100%;
+}
+.page{max-width:760px; margin:0 auto; padding-block:34px 80px;
+  padding-left:18px; padding-right:18px; display:flex; flex-direction:column; gap:56px}
+h1,h2,h3,h4{font-family:Spectral,Georgia,"Times New Roman",serif; margin:0;
+  font-weight:600; text-wrap:balance}
+h1{font-size:clamp(34px,9vw,56px); line-height:1.02; letter-spacing:-0.022em}
+h2{font-size:clamp(23px,5.4vw,31px); line-height:1.14; letter-spacing:-0.012em}
+h3{font-size:19px; line-height:1.25}
+h4{font-size:16px; line-height:1.3}
+p,ul,ol{margin:0}
+ul,ol{padding-left:1.15em}
+li+li{margin-top:7px}
+a{color:var(--pine); text-decoration-thickness:1px; text-underline-offset:2px}
+strong{font-weight:600}
+.eyebrow{font:500 10.5px/1 "DM Mono",ui-monospace,monospace; letter-spacing:.2em;
+  text-transform:uppercase; color:var(--faint)}
+.lede{font-size:19px; line-height:1.5; color:var(--soft)}
+.stack{display:flex; flex-direction:column; gap:16px}
+.tight{gap:10px}
+section{display:flex; flex-direction:column; gap:20px}
+hr{border:0; border-top:1px solid var(--edge); margin:0}
+
+header.mast{display:flex; flex-direction:column; gap:18px;
+  border-bottom:3px solid var(--ink); padding-bottom:26px}
+header.mast .sub{font-family:Spectral,Georgia,serif; font-style:italic;
+  font-size:19px; color:var(--soft)}
+
+/* the five sentences */
+.chant{display:flex; flex-wrap:wrap; gap:8px}
+.chant span{
+  font:600 14px/1 "DM Mono",ui-monospace,monospace; letter-spacing:.02em;
+  padding:9px 12px; border:1px solid var(--edge); border-radius:2px;
+  background:var(--surface); color:var(--ink);
+}
+.chant span b{color:var(--pine); font-weight:500}
+
+/* rungs */
+.rungs{display:flex; flex-direction:column; gap:1px; background:var(--edge);
+  border:1px solid var(--edge)}
+.rung{background:var(--surface); padding:24px 22px; display:flex;
+  flex-direction:column; gap:16px}
+.rung .head{display:flex; gap:16px; align-items:baseline}
+.rung .num{font:500 13px/1 "DM Mono",ui-monospace,monospace; color:var(--faint);
+  padding-top:4px; flex:none}
+.rung .said{font-family:Spectral,Georgia,serif; font-size:25px; font-weight:600;
+  line-height:1.1; letter-spacing:-0.01em}
+.rung .said em{font-style:italic; font-weight:400; color:var(--soft);
+  font-size:18px; display:block; margin-top:6px; letter-spacing:0}
+.rung dl{margin:0; display:grid; grid-template-columns:112px minmax(0,1fr);
+  gap:11px 16px; font-size:15px}
+.rung dt{font:500 10px/1.5 "DM Mono",ui-monospace,monospace; letter-spacing:.13em;
+  text-transform:uppercase; color:var(--faint); padding-top:3px}
+.rung dd{margin:0; color:var(--soft)}
+.rung dd b{color:var(--ink); font-weight:600}
+.room{display:inline-flex; align-items:center; gap:8px; font-weight:600;
+  color:var(--rust)}
+.room::before{content:""; width:7px; height:7px; background:var(--rust);
+  border-radius:50%; flex:none}
+.metric{font-family:"DM Mono",ui-monospace,monospace; font-size:14px;
+  color:var(--ink); background:var(--sunk); padding:2px 6px; border-radius:2px}
+
+/* generic panel */
+.panel{background:var(--surface); border:1px solid var(--edge); padding:22px;
+  display:flex; flex-direction:column; gap:14px}
+.panel.wash{background:var(--pine-wash); border-color:transparent}
+.panel.alarm{background:var(--rust-wash); border-color:transparent}
+.panel h3{font-size:17px}
+
+/* price ladder */
+.scroller{overflow-x:auto; -webkit-overflow-scrolling:touch}
+table{border-collapse:collapse; width:100%; min-width:520px; font-size:15px}
+th{text-align:left; font:500 10px/1.4 "DM Mono",ui-monospace,monospace;
+  letter-spacing:.13em; text-transform:uppercase; color:var(--faint);
+  padding:0 14px 10px 0; border-bottom:1px solid var(--ink); vertical-align:bottom}
+td{padding:13px 14px 13px 0; border-bottom:1px solid var(--hair);
+  vertical-align:top; color:var(--soft)}
+td:first-child{color:var(--ink); font-weight:600; white-space:nowrap}
+td.price{font-family:"DM Mono",ui-monospace,monospace; color:var(--ink);
+  white-space:nowrap; font-variant-numeric:tabular-nums}
+
+/* numbered steps */
+ol.steps{list-style:none; padding:0; display:flex; flex-direction:column; gap:2px}
+ol.steps li{background:var(--surface); border:1px solid var(--edge);
+  padding:18px 20px; display:grid; grid-template-columns:34px minmax(0,1fr);
+  gap:0 16px}
+ol.steps li+li{border-top-width:0}
+ol.steps .n{font:600 17px/1.3 "DM Mono",ui-monospace,monospace; color:var(--pine)}
+ol.steps h4{margin-bottom:6px}
+ol.steps p{color:var(--soft); font-size:15px}
+
+.figures{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:1px; background:var(--edge); border:1px solid var(--edge)}
+.figures div{background:var(--surface); padding:18px}
+.figures b{display:block; font:500 clamp(26px,7vw,34px)/1 "DM Mono",ui-monospace,monospace;
+  letter-spacing:-0.02em; color:var(--rust); font-variant-numeric:tabular-nums}
+.figures small{display:block; color:var(--soft); font-size:13.5px; margin-top:9px}
+
+.map{border-left:2px solid var(--edge); padding-left:18px;
+  display:flex; flex-direction:column; gap:0}
+.maprow{display:flex; align-items:baseline; gap:12px; padding:11px 0;
+  border-bottom:1px solid var(--hair); flex-wrap:wrap}
+.maprow:last-of-type{border-bottom:0}
+.mn{font:500 12px/1 "DM Mono",ui-monospace,monospace; color:var(--faint);
+  width:14px; flex:none}
+.mr{font-family:Spectral,Georgia,serif; font-size:19px; font-weight:600;
+  flex:1 1 auto}
+.mf{font:500 13px/1.3 "DM Mono",ui-monospace,monospace; color:var(--rust);
+  white-space:nowrap}
+.mf::before{content:"\2192\00a0"; opacity:.55}
+.mapnote{color:var(--faint); font-size:13.5px; margin-top:14px}
+
+.sources{font-size:13.5px; color:var(--faint); display:flex;
+  flex-direction:column; gap:7px}
+.sources a{color:var(--soft)}
+footer{border-top:1px solid var(--edge); padding-top:22px; display:flex;
+  flex-direction:column; gap:14px}
+@media (max-width:520px){
+  .rung dl{grid-template-columns:minmax(0,1fr); gap:4px}
+  .rung dt{padding-top:8px}
+  .rung .head{gap:12px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="page">
+
+<header class="mast">
+  <div class="eyebrow">business concept &middot; v0.1 &middot; september 2026</div>
+  <h1>The Belonging Ladder</h1>
+  <p class="sub">A repeatable, sellable model for building communities, priced on
+    the rung it moves rather than the hours it takes.</p>
+</header>
+
+<section>
+  <div class="eyebrow">the opening</div>
+  <h2>Two facts, and the gap between them</h2>
+  <p class="lede">People have started paying for community. Almost nobody can
+    say what one is.</p>
+  <p>That gap is the business. When a market wants something it cannot define,
+    the most valuable thing on offer is the definition — and the person who
+    supplies it gets to set the terms of every conversation that follows. It is
+    how EOS came to own small-business operations and how StoryBrand came to own
+    marketing messages. Name a small number of parts, put them in an order, add
+    a test at the front, and sell the naming.</p>
+  <p>The frameworks that already exist do not fill this gap, because they were
+    built for a different buyer. The Community Roundtable's Maturity Model scores
+    an organisation on eight internal competencies. The SPACES Model exists to
+    justify a community's budget to a finance director. The Orbit Model was built
+    for developer relations teams. All three assume the buyer already knows they
+    want a community and needs to measure or defend it.</p>
+  <p><strong>Your buyer is upstream of all of that.</strong> They have an
+    audience, a nagging sense that a community would be worth having, and no
+    model of what it is. They cannot be sold a maturity score. They can be sold
+    a description of what their members are going through.</p>
+</section>
+
+<section>
+  <div class="eyebrow">the market, briefly</div>
+  <h2>What it is worth and what is failing</h2>
+  <div class="figures">
+    <div><b>90%</b><small>of Discord servers are reported as ghost towns within
+      three months of launch</small></div>
+    <div><b>83%</b><small>of new servers never pass 100 members, because
+      operators build channels before they build a reason to return</small></div>
+    <div><b>20&ndash;30%</b><small>of members active per month is what a healthy
+      server looks like, so nine in ten quiet members is normal, not a
+      failure</small></div>
+  </div>
+  <p>Those three are industry figures from platform and agency sources rather
+    than peer-reviewed research, so quote them as the trade's own numbers and
+    not as findings. They are still the right frame for a sales conversation,
+    because every one of them describes something the buyer has already lived
+    through.</p>
+  <p>The money is real and the current shape of it is time-based. Creator Discord
+    management runs at roughly &euro;1,000&ndash;3,000 a month; broader community
+    retainers at &euro;1,000&ndash;5,000 for small clients and
+    &euro;5,000&ndash;15,000 for mid-market; strategic consulting bills at
+    &euro;100&ndash;200 an hour. Every one of those is a wage in disguise, and
+    every one of them caps out at the number of hours you have. The framework is
+    what lets you leave that pricing model without leaving the market.</p>
+</section>
+
+<hr>
+
+<section>
+  <div class="eyebrow">the framework</div>
+  <h2>Five things a member needs, in order</h2>
+  <p>A member of any community, on any platform, is asking five things in
+    sequence. Each one has to be answered before the next one gets asked. Each
+    has a mechanism from behavioural science underneath it, a named failure when
+    it goes wrong, and one number that says whether it is working.</p>
+  <div class="chant">
+    <span><b>1</b> Notice me</span>
+    <span><b>2</b> Answer me</span>
+    <span><b>3</b> Expect me</span>
+    <span><b>4</b> Know me</span>
+    <span><b>5</b> Need me</span>
+  </div>
+  <p><strong>The order is the whole product.</strong> It means you can say
+    <em>you are stuck on rung two</em>, which is the single most sellable
+    sentence in consulting: it tells the buyer where they are, what is next, and
+    that everything they are currently trying is being poured through a hole
+    further up.</p>
+
+  <div class="map">
+    <div class="maprow"><span class="mn">1</span><span class="mr">Notice me</span><span class="mf">The Foyer</span></div>
+    <div class="maprow"><span class="mn">2</span><span class="mr">Answer me</span><span class="mf">The Void</span></div>
+    <div class="maprow"><span class="mn">3</span><span class="mr">Expect me</span><span class="mf">The Carousel</span></div>
+    <div class="maprow"><span class="mn">4</span><span class="mr">Know me</span><span class="mf">The Throne Room</span></div>
+    <div class="maprow"><span class="mn">5</span><span class="mr">Need me</span><span class="mf">The One-Man Band</span></div>
+    <p class="mapnote">Left: what the member is asking. Right: where they end up
+      when nobody answers. You diagnose the lowest rung that is not holding.</p>
+  </div>
+</section>
+
+<section>
+  <div class="rungs">
+
+    <article class="rung">
+      <div class="head">
+        <div class="num">RUNG 01</div>
+        <div class="said">&ldquo;Notice me.&rdquo;
+          <em>I have just walked in. Is anything here for me, and what am I
+            supposed to do first?</em></div>
+      </div>
+      <dl>
+        <dt>Mechanism</dt>
+        <dd>Behaviour needs motivation, ability and a prompt at the same moment
+          (Fogg). A newcomer has the motivation — they clicked. What is missing is
+          ability and a prompt. A rules wall and eleven channels remove both, and
+          an open invitation to <b>&ldquo;introduce yourself&rdquo;</b> is
+          expensive because it asks a stranger to compose an identity before they
+          can speak.</dd>
+        <dt>Failure</dt>
+        <dd><span class="room">The Foyer</span> &mdash; people arrive, look
+          around a well-organised empty building, and leave. Membership numbers
+          rise the whole time.</dd>
+        <dt>Number</dt>
+        <dd><span class="metric">share of joiners who ever post</span> and the
+          median hours before a first post.</dd>
+        <dt>The fix</dt>
+        <dd>One question at the door that a stranger can answer in ten words.
+          Delete the gauntlet. Show evidence of life before you ask for anything.</dd>
+      </dl>
+    </article>
+
+    <article class="rung">
+      <div class="head">
+        <div class="num">RUNG 02</div>
+        <div class="said">&ldquo;Answer me.&rdquo;
+          <em>I said something. Did anyone notice?</em></div>
+      </div>
+      <dl>
+        <dt>Mechanism</dt>
+        <dd>Reciprocity is close to a human universal (Gouldner), and the
+          newcomer chapter of Kraut and Resnick's evidence review lands on the
+          same place: an unacknowledged first contribution is the most reliable
+          way to lose a member. The person concludes, correctly, that nobody was
+          waiting for them.</dd>
+        <dt>Failure</dt>
+        <dd><span class="room">The Void</span> &mdash; first posts land in
+          silence. This is the cheapest failure to fix and the most common one to
+          find.</dd>
+        <dt>Number</dt>
+        <dd><span class="metric">share of first posts answered within an hour</span>,
+          and separately, how many of those answers came from a member rather
+          than from you.</dd>
+        <dt>The fix</dt>
+        <dd>Named people on a greeting rota with a stated response time. Not a
+          bot. A person, using their name, responding to what was actually said.</dd>
+      </dl>
+    </article>
+
+    <article class="rung">
+      <div class="head">
+        <div class="num">RUNG 03</div>
+        <div class="said">&ldquo;Expect me.&rdquo;
+          <em>Is there a reason to come back on Thursday?</em></div>
+      </div>
+      <dl>
+        <dt>Mechanism</dt>
+        <dd>A habit is a cue, a routine and a reward, and the cue has to recur
+          predictably or no habit forms. Intentions attached to a specific time
+          and place get acted on far more often than intentions in general
+          (Gollwitzer's implementation intentions). Five irregular things produce
+          no habit in anybody; one fixed thing does.</dd>
+        <dt>Failure</dt>
+        <dd><span class="room">The Carousel</span> &mdash; constant arrivals
+          replacing constant departures. The dangerous one, because the headline
+          numbers hold up while nobody who joins is still there a month later.</dd>
+        <dt>Number</dt>
+        <dd><span class="metric">30-day cohort retention</span>: of everyone who
+          joined in January, how many were still posting in March.</dd>
+        <dt>The fix</dt>
+        <dd>Exactly one recurring event, same day, same hour, announced in advance
+          and summarised afterwards. Plus a personal nudge at day three and day
+          ten, written by a human.</dd>
+      </dl>
+    </article>
+
+    <article class="rung">
+      <div class="head">
+        <div class="num">RUNG 04</div>
+        <div class="said">&ldquo;Know me.&rdquo;
+          <em>Is there anybody here I would miss?</em></div>
+      </div>
+      <dl>
+        <dt>Mechanism</dt>
+        <dd>Relatedness is one of the three basic psychological needs in
+          self-determination theory (Deci and Ryan), and shared emotional
+          connection between <b>members</b> — not between members and the brand —
+          is one of the four components of a sense of community (McMillan and
+          Chavis, 1986). Weak ties do most of the structural work (Granovetter).
+          Dunbar's layers say why: a group holds together in circles of roughly
+          five, fifteen, fifty and a hundred and fifty, and nobody belongs to a
+          circle of eight thousand.</dd>
+        <dt>Failure</dt>
+        <dd><span class="room">The Throne Room</span> &mdash; every thread of
+          connection runs through the host. The members are an audience standing
+          in a room together. If the host goes quiet they have no reason to stay,
+          because there is nobody here they know.</dd>
+        <dt>Number</dt>
+        <dd><span class="metric">share of interactions that are member-to-member</span>,
+          and the share of members who have only ever interacted with staff.</dd>
+        <dt>The fix</dt>
+        <dd>Introduce two members to each other every week, with a stated reason,
+          in public. And wait thirty minutes before answering anything a member
+          could answer: standing is earned in the gap you leave.</dd>
+      </dl>
+    </article>
+
+    <article class="rung">
+      <div class="head">
+        <div class="num">RUNG 05</div>
+        <div class="said">&ldquo;Need me.&rdquo;
+          <em>Does this place want something from me?</em></div>
+      </div>
+      <dl>
+        <dt>Mechanism</dt>
+        <dd>Competence and autonomy are the other two needs in self-determination
+          theory. Small commitments make larger ones easier to accept
+          (foot-in-the-door, Freedman and Fraser), and people value what they
+          helped build out of proportion to its quality (the IKEA effect). Ostrom's
+          work on durable commons adds the governance half: the groups that last
+          are the ones whose members set and police their own rules, with
+          graduated consequences rather than arbitrary ones.</dd>
+        <dt>Failure</dt>
+        <dd><span class="room">The One-Man Band</span> &mdash; nothing happens
+          unless you are in the room. Whatever you have built is a job, not an
+          asset, and it will end when you burn out.</dd>
+        <dt>Number</dt>
+        <dd><span class="metric">member activity on the days you post nothing</span>,
+          and how few people account for half the conversation.</dd>
+        <dt>The fix</dt>
+        <dd>Give your existing connectors a title and one specific
+          responsibility each. Hand a recurring format to a member. Then announce
+          a fortnight away and take it.</dd>
+      </dl>
+    </article>
+
+  </div>
+
+  <div class="panel wash">
+    <h3>Why a member's journey, and not an organisation's maturity</h3>
+    <p>Three findings sit underneath the whole ladder. Participation in any
+      online community is wildly unequal, roughly on the order of ninety per cent
+      reading, nine per cent occasionally contributing and one per cent doing most
+      of the work (Nielsen). People move along a path from reader to contributor
+      to collaborator to leader rather than arriving as one or the other
+      (Preece and Shneiderman). And they learn how to belong by hovering at the
+      edge and copying what they see before they join in, which is why what a
+      newcomer can see in their first minute decides almost everything that
+      follows (Lave and Wenger's legitimate peripheral participation).</p>
+    <p>So the unit of analysis is a person climbing, not a department maturing.
+      That is also why it sells: a buyer who does not know what community means
+      has no opinion about their own maturity, but they immediately recognise a
+      member who walked in and left.</p>
+  </div>
+</section>
+
+<hr>
+
+<section>
+  <div class="eyebrow">the test</div>
+  <h2>The Drop-Off Test</h2>
+  <p>The diagnostic is the engine of the whole business. It does three jobs at
+    once: it teaches the market what community means, it identifies the buyer's
+    rung, and it establishes the baseline that makes impact pricing possible at
+    all. Without it you are back to selling hours.</p>
+  <p>Two questions per rung, answered by the owner, plus the matching number
+    pulled from their platform where you can get it. Output is one sentence:
+    <strong>you are stuck on rung two, in The Void, and here is the one thing to
+    do about it.</strong> Ten questions, two minutes, free.</p>
+  <div class="panel">
+    <h3>What makes it defensible rather than a quiz</h3>
+    <p>Every test you run adds a community to your own distribution. After ten,
+      the report stops saying <em>this looks low to me</em> and starts saying
+      <em>your first-post response rate is in the bottom quartile of the
+      communities I have measured.</em> Nobody who has not run the tests can say
+      that sentence, and it gets stronger every time you use it. The framework is
+      your marketing; the accumulated benchmark is the part that is hard to
+      copy.</p>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">the offer</div>
+  <h2>Selling the rung, not the month</h2>
+  <p>Here is the mechanism that turns this from a retainer with better branding
+    into impact pricing: <strong>the unit of sale is one rung.</strong></p>
+  <p>The contract names the rung, the number that defines it, the baseline you
+    measured, the target, the window, and what happens if it does not move. A
+    retainer sells presence. This sells a delta, and the delta is checkable by
+    both parties using the same test that produced the baseline.</p>
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Product</th><th>Price</th><th>What it is</th><th>Why it exists</th></tr></thead>
+      <tbody>
+        <tr><td>The Drop-Off Test</td><td class="price">free</td>
+          <td>Ten questions, self-serve. Names your rung and one fix.</td>
+          <td>Teaches the market the vocabulary. Generates the list. Builds the
+            benchmark.</td></tr>
+        <tr><td>The Audit</td><td class="price">&euro;600&ndash;1,200</td>
+          <td>Real data from their platform. Full report, the connectors and dead
+            rooms named, a 90-day plan.</td>
+          <td>Establishes the defensible baseline. Proves competence with numbers
+            instead of adjectives.</td></tr>
+        <tr><td>One Rung</td><td class="price">&euro;4,000&ndash;9,000</td>
+          <td>90 days, done with them, one rung only. Baseline and target in the
+            contract.</td>
+          <td>The core product. Priced on the movement, not the hours.</td></tr>
+        <tr><td>The Watch</td><td class="price">&euro;250&ndash;450/mo</td>
+          <td>Monthly re-measure, one call, drift caught early.</td>
+          <td>Near-free to deliver. Keeps the baseline current and the
+            relationship open.</td></tr>
+        <tr><td>Certification</td><td class="price">&euro;2,500&ndash;4,500</td>
+          <td>Train other community managers to run the ladder, with the
+            materials and the benchmark.</td>
+          <td>The only rung of your own ladder where your hours stop being the
+            input.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="panel alarm">
+    <h3>The guarantee is what makes it impact pricing</h3>
+    <p>Pick one and write it down: a stated share refunded if the number does not
+      move, or thirty further days at no charge. It is the difference between
+      claiming to sell outcomes and selling them. It is also only survivable
+      because the ladder makes the work predictable — you are not promising a
+      thriving community, you are promising one number on one rung inside ninety
+      days.</p>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">delivery</div>
+  <h2>What actually gets handed over</h2>
+  <p>A productised service is one where the deliverable is the same every time.
+    Five kits, one per rung, each a small set of artefacts rather than a set of
+    meetings.</p>
+  <ol class="steps">
+    <li><span class="n">01</span><div><h4>Door Kit</h4><p>The one-question
+      doorway, the first-message script, the channel cull list, and a rewritten
+      first-minute view of the space.</p></div></li>
+    <li><span class="n">02</span><div><h4>Greeter Kit</h4><p>The rota template,
+      the response-time promise, four reply patterns that are not
+      &ldquo;welcome!&rdquo;, and a weekly unanswered-posts check.</p></div></li>
+    <li><span class="n">03</span><div><h4>Rhythm Kit</h4><p>One ritual designed
+      end to end: format, cue, announcement, recap, and the member who eventually
+      owns it. Plus the day-three and day-ten nudge scripts.</p></div></li>
+    <li><span class="n">04</span><div><h4>Introduction Kit</h4><p>The weekly
+      pairing process, the thirty-minute staff delay rule, and the map of who
+      currently talks to whom, with the isolated regulars listed by name.</p></div></li>
+    <li><span class="n">05</span><div><h4>Handover Kit</h4><p>Role definitions
+      with one responsibility each, the norms document owned by moderators, the
+      graduated-consequences ladder, and the announced absence plan.</p></div></li>
+  </ol>
+  <p>Each kit is a file, not a call. That is what makes the ninetieth delivery
+    cost less than the first, and it is what a certified implementer is
+    eventually handed.</p>
+</section>
+
+<hr>
+
+<section>
+  <div class="eyebrow">sequencing</div>
+  <h2>The order to build this in</h2>
+  <p>The usual failure is building the course first. Do it backwards.</p>
+  <ol class="steps">
+    <li><span class="n">1</span><div><h4>Months 1&ndash;3 &middot; Use your two
+      clients as the laboratory</h4><p>You are already doing rungs one to four for
+      two completely different audiences. Write down what you do, with the rung
+      names attached, as you do it. Measure before and after. That is your v1 and
+      your first two case studies, and it costs you no extra time because you are
+      being paid for the work anyway.</p></div></li>
+    <li><span class="n">2</span><div><h4>Month 2 &middot; Publish the
+      definition</h4><p>One page: what community actually means, in five rungs.
+      Free, public, no gate. This is the answer to the question your whole market
+      is asking, and being the person who has an answer is the entire
+      positioning.</p></div></li>
+    <li><span class="n">3</span><div><h4>Month 3 &middot; Ship the test and run
+      it for free, twenty times</h4><p>Cold outreach stops being a pitch and
+      becomes a finding: <em>three per cent of your eight thousand members have
+      ever posted.</em> Twenty free tests gets you the benchmark, the list, and
+      the content.</p></div></li>
+    <li><span class="n">4</span><div><h4>Months 4&ndash;6 &middot; Sell three One
+      Rung engagements at a discount</h4><p>Explicitly priced low in exchange for
+      the case study and the right to publish the numbers. Three completed rungs
+      with before-and-after figures is what makes the full price
+      defensible.</p></div></li>
+    <li><span class="n">5</span><div><h4>Months 7&ndash;12 &middot; Raise the
+      price, add The Watch, write the kits properly</h4><p>By now the delivery is
+      repeatable enough that the margin comes from the kits rather than from your
+      presence.</p></div></li>
+    <li><span class="n">6</span><div><h4>Month 12+ &middot; Certify, once and not
+      before</h4><p>Ten completed engagements with movement you can show. Not
+      earlier. A certification built on an unproven method is the fastest way to
+      destroy the framework's credibility permanently.</p></div></li>
+  </ol>
+</section>
+
+<section>
+  <div class="eyebrow">honesty</div>
+  <h2>Four things that will go wrong</h2>
+  <div class="panel">
+    <h3>A framework is not a moat</h3>
+    <p>Anyone can copy five rungs once they know which five. What cannot be
+      copied is the measured benchmark, the case studies, and the fact of having
+      done it. All three come from running engagements, so the framework is the
+      marketing and the delivery is the defence.</p>
+  </div>
+  <div class="panel">
+    <h3>Impact pricing dies without measurement</h3>
+    <p>If you cannot produce a defensible baseline, the guarantee becomes an
+      argument and you will lose it. The diagnostic is load-bearing, not a
+      marketing toy, and it needs to work on data the client can actually give
+      you.</p>
+  </div>
+  <div class="panel">
+    <h3>Rung five is the one clients will not buy and most need</h3>
+    <p>Handing the community over reduces the founder's centrality, and many will
+      resist it while saying they want it. Sell it as insurance and as an asset
+      valuation rather than as delegation.</p>
+  </div>
+  <div class="panel">
+    <h3>Two employer-shaped clients is why there is no time to build this</h3>
+    <p>Early mornings, the middle of the day and late evenings is not a
+      foundation, it is the reason nothing gets built. One of the two becomes the
+      laboratory. The other gets deliberately shrunk on a date you choose in
+      advance, rather than on the day it becomes unbearable.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="eyebrow">where this comes from</div>
+  <p style="color:var(--soft); font-size:14.5px">The mechanisms are established
+    work: self-determination theory (Deci and Ryan), sense of community
+    (McMillan and Chavis, 1986), the evidence review in Kraut and Resnick's
+    <em>Building Successful Online Communities</em>, reader-to-leader
+    (Preece and Shneiderman, 2009), legitimate peripheral participation
+    (Lave and Wenger, 1991), implementation intentions (Gollwitzer), the Fogg
+    behaviour model, weak ties (Granovetter, 1973), Dunbar's layers, and Ostrom's
+    design principles for durable commons. What is new here is only the
+    arrangement, the naming, and the pricing mechanism.</p>
+  <div class="sources">
+    <span>Market and framework sources consulted:</span>
+    <a href="https://communityroundtable.com/what-we-do/research/community-maturity-model/">The Community Roundtable &mdash; Community Maturity Model</a>
+    <a href="https://www.cmxhub.com/blog/the-spaces-model">CMX Hub &mdash; The SPACES Model</a>
+    <a href="https://github.com/orbit-love/orbit-model">The Orbit Model</a>
+    <a href="https://mitpress.mit.edu/9780262528917/building-successful-online-communities/">MIT Press &mdash; Building Successful Online Communities</a>
+    <a href="https://research.mental-momentum.ai/r/discord-community-growth-monetization-jbm6i2">Discord community growth and monetisation trends, 2026</a>
+    <a href="https://www.influencers-time.com/discord-server-strategy-a-brand-playbook-for-retention/">Discord server strategy &mdash; a brand playbook for retention</a>
+    <a href="https://influenceflow.io/resources/content-creator-pricing-models-complete-guide-for-2026/">Content creator pricing models, 2026</a>
+    <a href="https://gigradar.io/blog/retainer-pricing">Retainer pricing benchmarks, 2026</a>
+    <a href="https://manyrequests.com/blog/agency-pricing-models">Agency pricing models for productised services</a>
+    <a href="https://www.eosworldwide.com/blog/eos-certification-explained-what-it-is-what-its-not-and-how-to-become-an-eos-implementer">EOS Worldwide &mdash; how the implementer licensing model works</a>
+    <a href="https://www.lifewithalacrity.com/article/a-revised-ostroms-design-principles-for-collective-governance-of-the-commons/">A revised reading of Ostrom's design principles</a>
+  </div>
+</footer>
+
+</div>
