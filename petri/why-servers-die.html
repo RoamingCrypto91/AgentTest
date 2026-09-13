@@ -1,0 +1,663 @@
+<title>Why Servers Die</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,600&family=JetBrains+Mono:wght@400;600&family=Public+Sans:wght@400;500&display=swap">
+<style>
+:root{
+  --field:#0a0e13; --panel:#121a22; --panel-2:#0e151c; --edge:#22303c;
+  --ink:#e9eff3; --soft:#8ea4b2; --faint:#5b6f7d;
+  --host:#ffc861; --tied:#4fd6b8; --lonely:#60798c; --dead:#26323d;
+  --accent:#4fd6b8; --warn:#ff8a72;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--field); color:var(--ink);
+  font:400 15px/1.55 "Public Sans",system-ui,-apple-system,Segoe UI,sans-serif;
+  -webkit-font-smoothing:antialiased; -webkit-text-size-adjust:100%;
+}
+.wrap{max-width:1080px; margin:0 auto; padding:22px 16px 56px;
+  display:flex; flex-direction:column; gap:22px}
+h1{
+  font:600 clamp(32px,9.5vw,58px)/0.98 Newsreader,Georgia,"Times New Roman",serif;
+  margin:0; letter-spacing:-0.025em; text-wrap:balance;
+}
+h1 em{font-style:normal; color:var(--accent)}
+.lede{color:var(--soft); max-width:54ch; margin:0}
+.eyebrow{
+  font:600 10px/1 "JetBrains Mono",ui-monospace,monospace; letter-spacing:.2em;
+  text-transform:uppercase; color:var(--faint);
+}
+
+.rig{display:grid; grid-template-columns:1fr; gap:18px}
+@media (min-width:860px){
+  .rig{grid-template-columns:minmax(0,1fr) 330px; align-items:start}
+}
+
+.stage{display:flex; flex-direction:column; gap:12px; min-width:0}
+.fieldbox{
+  position:relative; background:
+    radial-gradient(120% 110% at 50% 42%, #101a23 0%, var(--panel-2) 58%, #080c11 100%);
+  border:1px solid var(--edge); border-radius:3px; overflow:hidden;
+  aspect-ratio:1/1;
+}
+@media (min-width:860px){ .fieldbox{aspect-ratio:4/3} }
+canvas{display:block; width:100%; height:100%}
+.clock{
+  position:absolute; top:10px; left:12px; pointer-events:none;
+  font:600 11px/1 "JetBrains Mono",ui-monospace,monospace; letter-spacing:.12em;
+  color:var(--faint); text-transform:uppercase;
+}
+.shape{
+  position:absolute; top:10px; right:12px; pointer-events:none; text-align:right;
+  font:600 11px/1.5 "JetBrains Mono",ui-monospace,monospace; letter-spacing:.1em;
+  text-transform:uppercase;
+}
+.legend{
+  display:flex; flex-wrap:wrap; gap:6px 16px;
+  font:400 11.5px/1 "JetBrains Mono",ui-monospace,monospace; color:var(--faint);
+}
+.legend span{display:inline-flex; align-items:center; gap:6px}
+.legend i{width:8px; height:8px; border-radius:50%; display:inline-block}
+
+.tally{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1px;
+  background:var(--edge); border:1px solid var(--edge); border-radius:3px}
+.tally div{background:var(--panel-2); padding:12px 12px 13px}
+.tally b{
+  display:block; font:600 clamp(22px,6.4vw,30px)/1 "JetBrains Mono",ui-monospace,monospace;
+  font-variant-numeric:tabular-nums; letter-spacing:-.02em;
+}
+.tally small{display:block; color:var(--faint); font-size:10.5px; margin-top:7px;
+  letter-spacing:.07em; text-transform:uppercase;
+  font-family:"JetBrains Mono",ui-monospace,monospace}
+.tally .keep b{color:var(--accent)}
+.tally .lost b{color:var(--warn)}
+
+.curvebox{background:var(--panel-2); border:1px solid var(--edge); border-radius:3px;
+  padding:12px 12px 8px; display:flex; flex-direction:column; gap:8px}
+.curvebox canvas{height:96px}
+.curvecap{color:var(--faint); font-size:11.5px;
+  font-family:"JetBrains Mono",ui-monospace,monospace}
+
+.panel{background:var(--panel); border:1px solid var(--edge); border-radius:3px;
+  padding:16px; display:flex; flex-direction:column; gap:14px}
+.presets{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+button{
+  font:500 13.5px/1.25 "Public Sans",system-ui,sans-serif; color:var(--ink);
+  background:var(--panel-2); border:1px solid var(--edge); border-radius:2px;
+  padding:11px 12px; text-align:left; cursor:pointer; min-height:46px;
+  transition:border-color .15s, background .15s;
+}
+button:hover{border-color:var(--faint)}
+button[aria-pressed="true"]{border-color:var(--accent); background:#12242a; color:#fff}
+button:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.note{
+  color:var(--soft); font-size:13.5px; min-height:3.4em; margin:0;
+  border-left:2px solid var(--accent); padding-left:12px;
+}
+.dials{display:flex; flex-direction:column; gap:13px}
+label.dial{display:flex; flex-direction:column; gap:7px}
+label.dial .top{display:flex; justify-content:space-between; align-items:baseline; gap:10px}
+label.dial .name{font-size:13px; color:var(--ink)}
+label.dial .read{
+  font:600 12px/1 "JetBrains Mono",ui-monospace,monospace; color:var(--accent);
+  font-variant-numeric:tabular-nums;
+}
+input[type=range]{
+  -webkit-appearance:none; appearance:none; width:100%; height:26px;
+  background:transparent; margin:0; cursor:pointer;
+}
+input[type=range]::-webkit-slider-runnable-track{height:3px; background:var(--edge); border-radius:2px}
+input[type=range]::-moz-range-track{height:3px; background:var(--edge); border-radius:2px}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none; width:22px; height:22px; border-radius:50%;
+  background:var(--accent); border:3px solid var(--panel); margin-top:-10px;
+}
+input[type=range]::-moz-range-thumb{
+  width:22px; height:22px; border-radius:50%; background:var(--accent);
+  border:3px solid var(--panel);
+}
+input[type=range]:focus-visible{outline:2px solid var(--accent); outline-offset:4px}
+.restart{width:100%; text-align:center; font-weight:500}
+
+.words{display:flex; flex-direction:column; gap:16px; max-width:64ch}
+.words h2{font:600 22px/1.25 Newsreader,Georgia,serif; margin:0}
+.words p{margin:0; color:var(--soft)}
+.words b{color:var(--ink); font-weight:500}
+.smallprint{color:var(--faint); font-size:12.5px; border-top:1px solid var(--edge);
+  padding-top:14px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:12px">
+    <div class="eyebrow">a working model &middot; not a dashboard</div>
+    <h1>Why servers die,<br><em>and what stops it</em></h1>
+    <p class="lede">Every dot is a person. They arrive, they decide whether to
+      speak, and what happens next decides whether they stay. Tap a preset and
+      watch twelve weeks pass.</p>
+  </header>
+
+  <div class="rig">
+    <div class="stage">
+      <div class="fieldbox">
+        <canvas id="field" aria-label="A simulated community of members arriving, connecting and leaving"></canvas>
+        <div class="clock" id="clock">week 1 of 12</div>
+        <div class="shape" id="shape"></div>
+      </div>
+
+      <div class="legend">
+        <span><i style="background:var(--host)"></i>you</span>
+        <span><i style="background:var(--tied)"></i>knows someone</span>
+        <span><i style="background:var(--lonely)"></i>spoke, ignored</span>
+        <span><i style="background:#2b3a46"></i>never spoke</span>
+      </div>
+
+      <div class="tally">
+        <div><b id="t-arrived">0</b><small>arrived</small></div>
+        <div class="lost"><b id="t-silent">0</b><small>ever said a word</small></div>
+        <div class="keep"><b id="t-here">0</b><small>still here</small></div>
+      </div>
+
+      <div class="curvebox">
+        <canvas id="curve" aria-label="The share of everyone who arrived who is still active, week by week"></canvas>
+        <div class="curvecap" id="curvecap">of everyone who spoke, how many are still here &middot; faint lines are your earlier runs</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="eyebrow">start here</div>
+      <div class="presets" id="presets"></div>
+      <p class="note" id="note"></p>
+
+      <div class="eyebrow" style="margin-top:2px">or turn the dials</div>
+      <div class="dials" id="dials"></div>
+      <button class="restart" id="restart" type="button">Run it again</button>
+    </div>
+  </div>
+
+  <div class="words">
+    <h2>What the model actually assumes</h2>
+    <p>Four rules, and nothing else. <b>One:</b> most people who arrive are
+      deciding whether this place is for them, and they decide fast.
+      <b>Two:</b> a first post that nobody answers is the cheapest way to lose
+      somebody — they conclude, correctly, that nobody was waiting for them.
+      <b>Three:</b> a tie to another member is what makes leaving expensive; a
+      tie to the host only makes it expensive to leave the host. <b>Four:</b>
+      attention divides. Nine rooms is nine places to be ignored in.</p>
+    <p>Everything you can see on the field comes out of those four. Nobody
+      programmed the ring that forms around you when members never answer each
+      other, or the clump that forms when they do. Those are shapes the rules
+      make.</p>
+    <p class="smallprint">This is a simulation, not anyone's data. It is worth
+      what its assumptions are worth, and the assumptions are listed above so
+      you can argue with them. The useful bit is that the four dials are the
+      four things you actually control.</p>
+  </div>
+</div>
+
+<script>
+"use strict";
+(function () {
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---- the dials ------------------------------------------------------ */
+  const DIALS = [
+    { key: "greeting", name: "Someone answers a first post", min: 0, max: 100, step: 5,
+      fmt: v => v + "%" },
+    { key: "members", name: "…and it's a member, not you", min: 0, max: 100, step: 5,
+      fmt: v => v + "%" },
+    { key: "rooms", name: "Rooms the talk is split across", min: 1, max: 14, step: 1,
+      fmt: v => v },
+    { key: "ritual", name: "One fixed weekly thing", min: 0, max: 1, step: 1,
+      fmt: v => (v ? "yes" : "no") },
+  ];
+
+  const PRESETS = [
+    { name: "Most servers",
+      p: { greeting: 35, members: 10, rooms: 9, ritual: 0 },
+      note: "The default state of almost every community server. Plenty of " +
+            "rooms, the host answers what gets answered, and two thirds of " +
+            "first posts land in silence." },
+    { name: "One person greets",
+      p: { greeting: 90, members: 10, rooms: 9, ritual: 0 },
+      note: "Change one thing: every first post gets a human reply. Nothing " +
+            "else moves. This is the cheapest intervention there is and it is " +
+            "usually the largest." },
+    { name: "Members answer",
+      p: { greeting: 90, members: 70, rooms: 9, ritual: 0 },
+      note: "Now the answer comes from another member. Watch the shape change: " +
+            "the ring around you breaks up into a mesh, because people are " +
+            "meeting each other instead of meeting you." },
+    { name: "Fewer rooms, one ritual",
+      p: { greeting: 90, members: 70, rooms: 3, ritual: 1 },
+      note: "Attention stops being divided fourteen ways, and one fixed weekly " +
+            "event gives everybody a reason to come back. This is what a " +
+            "community that runs without you looks like." },
+  ];
+
+  const P = Object.assign({}, PRESETS[0].p);
+  let preset = 0;
+
+  /* ---- state ---------------------------------------------------------- */
+  const WEEKS = 12, DAYS = WEEKS * 7, FRAMES_PER_DAY = reduced ? 1 : 16;
+  const CAP = 340;
+
+  let people = [], day = 0, frame = 0, arrived = 0, spoke = 0;
+  let ansHost = 0, ansMember = 0;
+  let curve = [], ghosts = [], holding = 0, rng = mulberry(20260913);
+
+  function mulberry(seed) {
+    let a = seed >>> 0;
+    return function () {
+      a += 0x6D2B79F5; let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  /* ---- canvases ------------------------------------------------------- */
+  const field = document.getElementById("field");
+  const fx = field.getContext("2d");
+  const curveEl = document.getElementById("curve");
+  const cx = curveEl.getContext("2d");
+  let W = 0, H = 0, S = 0;
+
+  function fit() {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    for (const [el, ctx] of [[field, fx], [curveEl, cx]]) {
+      const r = el.getBoundingClientRect();
+      el.width = Math.max(1, Math.round(r.width * dpr));
+      el.height = Math.max(1, Math.round(r.height * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    const r = field.getBoundingClientRect();
+    W = r.width; H = r.height; S = Math.min(W, H);
+    drawCurve();
+  }
+
+  /* ---- people --------------------------------------------------------- */
+  function person(isHost) {
+    const a = rng() * Math.PI * 2, d = isHost ? 0 : 0.47 * S;
+    return {
+      host: !!isHost,
+      x: W / 2 + Math.cos(a) * d, y: H / 2 + Math.sin(a) * d,
+      vx: 0, vy: 0,
+      e: isHost ? 1 : 0.28 + rng() * 0.34,
+      vocal: isHost || rng() < 0.34,
+      debutDay: day + 1 + ((rng() * 7) | 0),
+      spoke: !!isHost, joined: day, ties: [], alive: true, fade: 1, pulse: 0,
+    };
+  }
+
+  function reset(keepGhost) {
+    if (keepGhost && curve.length > 6) {
+      ghosts.push(curve.slice());
+      if (ghosts.length > 4) ghosts.shift();
+    }
+    people = [person(true)];
+    day = 0; frame = 0; arrived = 0; spoke = 0; curve = []; holding = 0;
+    ansHost = 0; ansMember = 0;
+    rng = mulberry(20260913);
+  }
+
+  function tie(a, b) {
+    if (a === b) return;
+    const A = people[a], B = people[b];
+    if (!A || !B) return;
+    const room = q => (q.host ? 400 : 12);
+    if (!A.ties.includes(b) && A.ties.length < room(A)) A.ties.push(b);
+    if (!B.ties.includes(a) && B.ties.length < room(B)) B.ties.push(a);
+  }
+
+  /* ---- one simulated day ---------------------------------------------- */
+  function aDay() {
+    day++;
+    const ritualDay = P.ritual && day % 7 === 3;
+    const dilute = 1 / (1 + (P.rooms - 1) * 0.13);
+    const greet = (P.greeting / 100) * dilute;
+    const byMember = P.members / 100;
+
+    const alive = [];
+    for (let i = 0; i < people.length; i++) if (people[i].alive) alive.push(i);
+
+    if (alive.length < CAP) {
+      const want = 6;
+      for (let k = 0; k < want; k++) { people.push(person(false)); arrived++; }
+    }
+
+    const talkers = [];
+    for (const i of alive) {
+      const p = people[i];
+      if (p.host) continue;
+      const held = 1 - 0.62 * Math.min(1, p.ties.length / 3);
+      p.e -= (ritualDay ? 0.012 : 0.058) * held;
+      if (p.e <= 0.02) { p.alive = false; p.pulse = 0; continue; }
+      if (!p.vocal) continue;
+      if (!p.spoke) {
+        if (day < p.debutDay || day > p.debutDay + 2) continue;
+        talkers.push(i);
+      } else if (rng() < Math.min(0.92, p.e) * (ritualDay ? 1.4 : 1)) {
+        talkers.push(i);
+      }
+    }
+
+    const regulars = alive.filter(i => people[i].spoke && !people[i].host);
+    for (const i of talkers) {
+      const p = people[i];
+      const debut = !p.spoke;
+      if (debut) { p.spoke = true; spoke++; }
+      p.pulse = 1;
+
+      const answered = rng() < (debut ? greet : Math.min(0.95, greet + 0.25));
+      if (!answered) { if (debut) p.e -= 0.46; continue; }
+
+      let who = 0;
+      if (regulars.length && rng() < byMember) {
+        who = regulars[(rng() * regulars.length) | 0];
+        if (who === i) who = 0;
+      }
+      tie(i, who);
+      (who === 0 ? ansHost++ : ansMember++);
+      people[who].pulse = 0.7;
+      p.e = Math.min(1, p.e + (debut ? 0.42 : 0.16));
+      if (!people[who].host) people[who].e = Math.min(1, people[who].e + 0.05);
+    }
+
+    if (ritualDay) for (const i of alive) if (people[i].ties.length) {
+      people[i].e = Math.min(1, people[i].e + 0.14);
+    }
+
+    let here = 0;
+    for (const p of people) if (p.alive && !p.host && p.spoke) here++;
+    curve.push(spoke ? here / spoke : 0);
+    readout(here);
+  }
+
+  /* ---- physics -------------------------------------------------------- */
+  function move() {
+    const near = S * 0.052, near2 = near * near, want = S * 0.105;
+    for (let i = 0; i < people.length; i++) {
+      const p = people[i];
+      if (p.host) continue;
+      if (!p.alive) {
+        p.fade -= 0.022;
+        const dx = p.x - W / 2, dy = p.y - H / 2, d = Math.hypot(dx, dy) || 1;
+        p.x += (dx / d) * 0.9; p.y += (dy / d) * 0.9;
+        continue;
+      }
+      p.vx += (W / 2 - p.x) * 0.0006;
+      p.vy += (H / 2 - p.y) * 0.0006;
+
+      if (!p.ties.length) {
+        const dx = W / 2 - p.x, dy = H / 2 - p.y, d = Math.hypot(dx, dy) || 1;
+        const pull = (d - S * (p.spoke ? 0.30 : 0.42)) * 0.004;
+        p.vx += (dx / d) * pull; p.vy += (dy / d) * pull;
+      }
+      for (const j of p.ties) {
+        const q = people[j]; if (!q || !q.alive) continue;
+        const dx = q.x - p.x, dy = q.y - p.y, d = Math.hypot(dx, dy) || 1;
+        const f = (d - want) * 0.0038;
+        p.vx += (dx / d) * f; p.vy += (dy / d) * f;
+      }
+      for (let j = 0; j < people.length; j++) {
+        if (j === i) continue;
+        const q = people[j]; if (!q.alive) continue;
+        const dx = p.x - q.x, dy = p.y - q.y, d2 = dx * dx + dy * dy;
+        if (d2 > near2 || d2 === 0) continue;
+        const d = Math.sqrt(d2), f = (near - d) * 0.030;
+        p.vx += (dx / d) * f; p.vy += (dy / d) * f;
+      }
+      p.vx *= 0.84; p.vy *= 0.84;
+      p.x += p.vx; p.y += p.vy;
+      if (p.pulse > 0) p.pulse -= 0.03;
+    }
+    if (people.length > CAP * 2.2) {
+      people = people.filter((p, i) => i === 0 || p.alive || p.fade > 0);
+      for (const p of people) p.ties = [];
+    }
+  }
+
+  /* ---- drawing -------------------------------------------------------- */
+  const css = getComputedStyle(document.documentElement);
+  const C = k => css.getPropertyValue(k).trim();
+
+  function drawField() {
+    fx.clearRect(0, 0, W, H);
+
+    fx.lineWidth = 1;
+    fx.strokeStyle = "rgba(79,214,184,0.23)";
+    fx.beginPath();
+    let lines = 0;
+    for (let i = 1; i < people.length && lines < 1400; i++) {
+      const p = people[i]; if (!p.alive) continue;
+      for (const j of p.ties) {
+        if (j <= i) continue;
+        const q = people[j]; if (!q || !q.alive) continue;
+        fx.moveTo(p.x, p.y); fx.lineTo(q.x, q.y); lines++;
+      }
+    }
+    fx.stroke();
+
+    fx.strokeStyle = "rgba(255,200,97,0.19)";
+    fx.beginPath();
+    const host = people[0];
+    let hostLines = 0;
+    for (const j of host.ties) {
+      if (hostLines > 260) break;
+      const q = people[j]; if (!q || !q.alive) continue;
+      fx.moveTo(host.x, host.y); fx.lineTo(q.x, q.y); hostLines++;
+    }
+    fx.stroke();
+
+    for (let i = 1; i < people.length; i++) {
+      const p = people[i];
+      if (!p.alive && p.fade <= 0) continue;
+      const tied = p.ties.length > 0;
+      let col, r, a;
+      if (!p.spoke) { col = "58,76,90"; r = 2.0; a = 0.9; }
+      else if (tied) { col = "79,214,184"; r = 2.4 + 3.0 * p.e; a = 0.45 + 0.55 * p.e; }
+      else { col = "96,121,140"; r = 2.2 + 1.2 * p.e; a = 0.4 + 0.4 * p.e; }
+      if (!p.alive) a *= Math.max(0, p.fade) * 0.6;
+      if (p.pulse > 0) {
+        fx.beginPath();
+        fx.arc(p.x, p.y, r + 7 * p.pulse, 0, 6.2832);
+        fx.fillStyle = "rgba(" + col + "," + (0.16 * p.pulse) + ")";
+        fx.fill();
+      }
+      fx.beginPath();
+      fx.arc(p.x, p.y, r, 0, 6.2832);
+      fx.fillStyle = "rgba(" + col + "," + a + ")";
+      fx.fill();
+    }
+
+    if (day >= DAYS) drawResult();
+
+    const g = fx.createRadialGradient(host.x, host.y, 0, host.x, host.y, 34);
+    g.addColorStop(0, "rgba(255,200,97,0.30)");
+    g.addColorStop(1, "rgba(255,200,97,0)");
+    fx.fillStyle = g;
+    fx.beginPath(); fx.arc(host.x, host.y, 34, 0, 6.2832); fx.fill();
+    fx.beginPath(); fx.arc(host.x, host.y, 6.5, 0, 6.2832);
+    fx.fillStyle = C("--host"); fx.fill();
+  }
+
+  function drawResult() {
+    let here = 0;
+    for (const p of people) if (p.alive && !p.host && p.spoke) here++;
+    const kept = spoke ? Math.round((here / spoke) * 100) : 0;
+    const size = Math.max(15, Math.min(27, S * 0.058));
+
+    fx.save();
+    fx.textAlign = "center";
+    fx.fillStyle = "rgba(8,12,17,0.76)";
+    fx.fillRect(0, H / 2 - size * 2.3, W, size * 4.6);
+    fx.fillStyle = C("--faint");
+    fx.font = '400 ' + Math.max(10, size * 0.5) + 'px "JetBrains Mono", monospace';
+    fx.fillText("TWELVE WEEKS LATER", W / 2, H / 2 - size * 1.15);
+    fx.fillStyle = C("--accent");
+    fx.font = '600 ' + (size * 1.45) + 'px "JetBrains Mono", monospace';
+    fx.fillText(here + " still here", W / 2, H / 2 + size * 0.35);
+    fx.fillStyle = C("--soft");
+    fx.font = '400 ' + Math.max(10, size * 0.5) + 'px "JetBrains Mono", monospace';
+    fx.fillText(arrived + " arrived  \u00b7  " + spoke + " ever spoke  \u00b7  " +
+                kept + "% of them stayed", W / 2, H / 2 + size * 1.5);
+    fx.restore();
+  }
+
+  function drawCurve() {
+    const r = curveEl.getBoundingClientRect(), w = r.width, h = r.height;
+    const pl = 30, pr = 8, pt = 8, pb = 16;
+    cx.clearRect(0, 0, w, h);
+
+    cx.strokeStyle = C("--edge"); cx.lineWidth = 1;
+    cx.beginPath();
+    cx.moveTo(pl, h - pb); cx.lineTo(w - pr, h - pb); cx.stroke();
+    cx.fillStyle = C("--faint");
+    cx.font = '10px "JetBrains Mono", monospace';
+    cx.textAlign = "right";
+    cx.fillText("100%", pl - 5, pt + 8);
+    cx.fillText("0", pl - 5, h - pb + 3);
+    cx.textAlign = "left";
+    cx.fillText("week 1", pl, h - 4);
+    cx.textAlign = "right";
+    cx.fillText("week 12", w - pr, h - 4);
+
+    const plot = (data, colour, width) => {
+      if (data.length < 2) return;
+      cx.strokeStyle = colour; cx.lineWidth = width;
+      cx.beginPath();
+      for (let i = 0; i < data.length; i++) {
+        const x = pl + (i / (DAYS - 1)) * (w - pl - pr);
+        const y = (h - pb) - Math.max(0, Math.min(1, data[i])) * (h - pt - pb);
+        i ? cx.lineTo(x, y) : cx.moveTo(x, y);
+      }
+      cx.stroke();
+    };
+    for (const gh of ghosts) plot(gh, "rgba(142,164,178,0.28)", 1.5);
+    plot(curve, C("--accent"), 2);
+
+    if (curve.length > 1) {
+      const i = curve.length - 1;
+      const x = pl + (i / (DAYS - 1)) * (w - pl - pr);
+      const y = (h - pb) - Math.max(0, Math.min(1, curve[i])) * (h - pt - pb);
+      cx.beginPath(); cx.arc(x, y, 3, 0, 6.2832);
+      cx.fillStyle = C("--accent"); cx.fill();
+    }
+  }
+
+  /* ---- readouts ------------------------------------------------------- */
+  const el = {
+    arrived: document.getElementById("t-arrived"),
+    here: document.getElementById("t-here"),
+    silent: document.getElementById("t-silent"),
+    clock: document.getElementById("clock"),
+    shape: document.getElementById("shape"),
+  };
+
+  function readout(here) {
+    el.arrived.textContent = arrived;
+    el.here.textContent = here;
+    el.silent.textContent = spoke;
+    el.clock.textContent = "week " + Math.min(WEEKS, Math.ceil(day / 7) || 1) +
+      " of " + WEEKS;
+
+    let label = "warming up", colour = C("--faint");
+    const answers = ansHost + ansMember;
+    if (answers > 25) {
+      const share = ansMember / answers;
+      if (share > 0.55) { label = "a community"; colour = C("--tied"); }
+      else if (share > 0.28) { label = "getting there"; colour = C("--host"); }
+      else { label = "a noticeboard"; colour = C("--warn"); }
+    }
+    el.shape.textContent = label;
+    el.shape.style.color = colour;
+  }
+
+  /* ---- controls -------------------------------------------------------- */
+  const noteEl = document.getElementById("note");
+  const presetBox = document.getElementById("presets");
+  const dialBox = document.getElementById("dials");
+  const inputs = {};
+
+  PRESETS.forEach((ps, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.id = "preset-" + i;
+    b.textContent = ps.name;
+    b.setAttribute("aria-pressed", String(i === 0));
+    b.addEventListener("click", () => usePreset(i));
+    presetBox.appendChild(b);
+  });
+
+  DIALS.forEach(d => {
+    const wrap = document.createElement("label");
+    wrap.className = "dial";
+    wrap.htmlFor = "dial-" + d.key;
+    const top = document.createElement("div");
+    top.className = "top";
+    const name = document.createElement("span");
+    name.className = "name"; name.textContent = d.name;
+    const read = document.createElement("span");
+    read.className = "read"; read.id = "read-" + d.key;
+    top.append(name, read);
+    const input = document.createElement("input");
+    input.type = "range"; input.id = "dial-" + d.key;
+    input.min = d.min; input.max = d.max; input.step = d.step;
+    input.value = P[d.key];
+    input.addEventListener("input", () => {
+      P[d.key] = Number(input.value);
+      read.textContent = d.fmt(P[d.key]);
+      setPressed(-1);
+      noteEl.textContent = "Your own settings. Each run leaves a faint line on " +
+        "the chart, so you can see exactly what the change did.";
+      reset(true);
+    });
+    inputs[d.key] = { input: input, read: read, fmt: d.fmt };
+    wrap.append(top, input);
+    dialBox.appendChild(wrap);
+  });
+
+  function setPressed(i) {
+    PRESETS.forEach((_, k) => {
+      document.getElementById("preset-" + k)
+        .setAttribute("aria-pressed", String(k === i));
+    });
+  }
+
+  function usePreset(i) {
+    preset = i;
+    Object.assign(P, PRESETS[i].p);
+    for (const key in inputs) {
+      inputs[key].input.value = P[key];
+      inputs[key].read.textContent = inputs[key].fmt(P[key]);
+    }
+    setPressed(i);
+    noteEl.textContent = PRESETS[i].note;
+    reset(true);
+  }
+
+  document.getElementById("restart").addEventListener("click", () => reset(true));
+
+  /* ---- loop ------------------------------------------------------------ */
+  function loop() {
+    if (day >= DAYS) {
+      if (!holding) holding = performance.now();
+      else if (performance.now() - holding > 3200) reset(true);
+    } else if (++frame % FRAMES_PER_DAY === 0) {
+      aDay();
+    }
+    move();
+    drawField();
+    drawCurve();
+    requestAnimationFrame(loop);
+  }
+
+  addEventListener("resize", fit);
+  fit();
+  usePreset(0);
+  readout(0);
+  requestAnimationFrame(loop);
+})();
+</script>
